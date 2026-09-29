@@ -357,7 +357,7 @@ private fun LazyListScope.musicVideos(c: Ctx) {
 fun MusicVideoCard(c: Ctx, v: MusicVideo) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).clickable { c.st.push(Screen.Video(v.id, VideoKind.MUSIC_VIDEO)) }) {
         Art(v.title, if (v.hasArt) c.repo.artUrl(v.id, "thumb") else null, Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-            PlayDisc(Modifier.align(Alignment.Center))
+            PlayDisc(modifier = Modifier.align(Alignment.Center))
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { DownloadChip(c, v.id) { c.repo.download(v) } }
         }
         Spacer(Modifier.height(8.dp))
