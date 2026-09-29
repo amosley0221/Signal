@@ -108,7 +108,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         if (controller != null) return
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
-        future.addListener({ controller = runCatching { future.get() }.getOrNull() }, context.mainExecutor)
+        future.addListener({ controller = runCatching { future.get() }.getOrNull() }, androidx.core.content.ContextCompat.getMainExecutor(context))
     }
 
     private fun durationOf(p: Player): Long = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: (_ui.value.current?.durationMs ?: 0)
