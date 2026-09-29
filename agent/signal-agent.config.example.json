@@ -1,0 +1,15 @@
+{
+  "name": "STUDIO-PC",
+  "port": 8765,
+  "dataDir": "./data",
+  "libraries": [
+    { "id": "l1", "name": "Suno Music", "type": "music", "path": "D:\\Music\\Suno" },
+    { "id": "l2", "name": "Music Videos", "type": "musicvideos", "path": "D:\\Music Videos" },
+    { "id": "l3", "name": "TV Shows", "type": "tv", "path": "E:\\TV" },
+    { "id": "l4", "name": "Movies", "type": "movies", "path": "E:\\Movies" }
+  ],
+  "plex": {
+    "url": "http://127.0.0.1:32400",
+    "token": ""
+  }
+}

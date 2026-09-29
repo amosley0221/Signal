@@ -1,0 +1,24 @@
+{
+  "name": "signal-agent",
+  "version": "1.0.0",
+  "description": "Signal Agent - serves PC media folders to the Signal Player Android app",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "signal-agent": "src/index.js"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bonjour-service": "^1.4.4",
+    "music-metadata": "^11.16.1",
+    "node-id3": "^0.2.9"
+  }
+}
