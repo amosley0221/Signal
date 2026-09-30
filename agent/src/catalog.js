@@ -18,6 +18,13 @@ const CACHE_VERSION = 1;
 const SKIP_DIRS = new Set(['$recycle.bin', 'system volume information', '@eadir', '#recycle', 'node_modules', '.git']);
 const stripTrackNo = (s) => s.replace(/^\d{1,3}(?:[\s.\-_]+|\s*-\s*)/, '').trim() || s;
 
+const PUBLISH_EVERY = 400;
+const META_TIMEOUT_MS = 30000;
+function withTimeout(promise, ms, message) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(message)), ms); t.unref?.(); })]).finally(() => clearTimeout(t));
+}
+
 export class Catalog {
   /**
    * @param {{config:any, state:import('./state.js').State, activity:import('./activity.js').Activity, plex:import('./plex.js').Plex|null, log:Function}} deps
@@ -111,6 +118,9 @@ export class Catalog {
       try {
         const r = await this.#scanLibrary(lib, job);
         job.done(`${r.total} files · ${r.parsed} updated · ${r.removed} removed`);
+        // Show each library as soon as it's done instead of waiting for all of them.
+        this.build();
+        await this.saveCache();
         if (r.parsed || r.removed) this.log(`[scan] ${lib.name}: ${r.total} files, ${r.parsed} (re)read, ${r.removed} removed`);
       } catch (e) {
         job.fail(e);
@@ -179,7 +189,19 @@ export class Catalog {
     let parsed = 0;
     let done = 0;
     job.progressTo(0, `${files.length} files`);
-    await mapLimit(files, 4, async (f) => {
+    // Publish progress while a big library scans, so the phone sees songs/episodes as they're read
+    // and a restart doesn't start over: every PUBLISH_EVERY files, merge what we have into the cache.
+    let sincePublish = 0;
+    let publishing = false;
+    const publish = async () => {
+      if (publishing) return;
+      publishing = true;
+      sincePublish = 0;
+      this.cache.libs[lib.id] = { files: { ...prev, ...next }, shows: this.cache.libs[lib.id]?.shows || {}, lastScan: this.cache.libs[lib.id]?.lastScan || null };
+      this.build();
+      try { await this.saveCache(); } finally { publishing = false; }
+    };
+    await mapLimit(files, lib.type === 'music' ? 4 : 6, async (f) => {
       if (this.stopRequested) throw new Error('stopped (settings changed)');
       const role = this.roleFor(lib, f.kind);
       if (role) {
@@ -192,6 +214,7 @@ export class Catalog {
       }
       done++;
       if (done % 25 === 0) job.progressTo(done / files.length, `${done} / ${files.length}`);
+      if (++sincePublish >= PUBLISH_EVERY) await publish();
     });
     // show-level artwork for TV libraries
     const shows = {};
@@ -220,7 +243,8 @@ export class Catalog {
     } else {
       let meta;
       try {
-        meta = f.kind === 'audio' ? await readAudioMeta(f.abs) : await readVideoMeta(f.abs);
+        // A damaged or huge file must not stall the whole scan.
+        meta = await withTimeout(f.kind === 'audio' ? readAudioMeta(f.abs) : readVideoMeta(f.abs), META_TIMEOUT_MS, `reading ${f.name} took too long`);
       } catch (e) {
         meta = { error: String(e.message || e) };
       }

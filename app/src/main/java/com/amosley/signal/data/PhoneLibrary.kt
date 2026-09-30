@@ -29,19 +29,46 @@ object PhoneLibrary {
     }
 
     /** The most specific chosen folder that contains [folder] (a choice covers its subfolders). */
-    fun typeOf(folder: String?, chosen: Map<String, PhoneFolderType>): PhoneFolderType? {
+    fun typeOf(folder: String?, chosen: Map<String, PhoneFolderType>): PhoneFolderType? = rootOf(folder, chosen)?.value
+
+    fun rootOf(folder: String?, chosen: Map<String, PhoneFolderType>): Map.Entry<String, PhoneFolderType>? {
         val f = folder ?: return null
-        return chosen.entries
-            .filter { (k, _) -> f == k || f.startsWith("$k/") }
-            .maxByOrNull { it.key.length }?.value
+        return chosen.entries.filter { (k, _) -> f == k || f.startsWith("$k/") }.maxByOrNull { it.key.length }
     }
+
+    /** Sub-folders one level below [path] ("" = storage root), with media counts for everything inside them. */
+    fun children(path: String, all: List<PhoneFolder>): List<PhoneFolder> {
+        val prefix = if (path.isEmpty()) "" else "$path/"
+        val agg = LinkedHashMap<String, IntArray>()
+        for (f in all) {
+            if (prefix.isNotEmpty() && !f.path.startsWith(prefix)) continue
+            val rest = f.path.removePrefix(prefix)
+            if (rest.isEmpty()) continue
+            val child = prefix + rest.substringBefore('/')
+            val a = agg.getOrPut(child) { IntArray(2) }
+            a[0] += f.audio; a[1] += f.video
+        }
+        return agg.map { (k, v) -> PhoneFolder(k, v[0], v[1]) }.sortedBy { it.path.substringAfterLast('/').lowercase() }
+    }
+
+    /** Media directly in [path] (not in sub-folders). */
+    fun own(path: String, all: List<PhoneFolder>): PhoneFolder? = all.firstOrNull { it.path == path }
 
     private val episodeRe = Regex("(?i)S(\\d{1,2})\\s*E(\\d{1,3})")
 
     fun split(tracks: List<Track>, videos: List<Movie>, chosen: Map<String, PhoneFolderType>): PhoneMedia {
         val keptTracks = tracks.filter { typeOf(it.folder, chosen) == PhoneFolderType.MUSIC }
         val byType = videos.groupBy { typeOf(it.folder, chosen) }
-        val movies = byType[PhoneFolderType.MOVIES].orEmpty()
+        // Movies kept in their own folders ("Movies/Inception (2010)/inception.mkv"): the folder name often
+        // carries the proper title and year when the file name doesn't.
+        val movies = byType[PhoneFolderType.MOVIES].orEmpty().map { v ->
+            val root = rootOf(v.folder, chosen)?.key
+            val folderName = v.folder?.takeIf { root != null && it != root }?.substringAfterLast('/')
+            val fromFolder = folderName?.let { com.amosley.signal.core.VideoNames.parse(it) }
+            if (fromFolder != null && fromFolder.title.isNotBlank() && (v.year == null || fromFolder.year != null) && fromFolder.year != null) {
+                v.copy(title = fromFolder.title, year = fromFolder.year)
+            } else v
+        }
         val musicVideos = byType[PhoneFolderType.MUSIC_VIDEOS].orEmpty().map { v ->
             MusicVideo(
                 id = v.id, title = v.title, durationMs = v.durationMs, width = v.width, height = v.height,

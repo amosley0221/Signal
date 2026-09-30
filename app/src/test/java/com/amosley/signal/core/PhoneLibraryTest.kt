@@ -58,3 +58,29 @@ class OnlineLyricsTest {
         assertEquals("lrclib-instrumental", com.amosley.signal.data.OnlineLyrics.toLyrics(rec(1.0, instrumental = true))!!.source)
     }
 }
+
+class PhoneFolderTreeTest {
+    private val all = listOf(
+        com.amosley.signal.data.PhoneFolder("Music/Suno", 10, 0),
+        com.amosley.signal.data.PhoneFolder("Music/Suno/Album", 5, 0),
+        com.amosley.signal.data.PhoneFolder("Movies/Inception (2010)", 0, 1),
+        com.amosley.signal.data.PhoneFolder("DCIM/Camera", 0, 8),
+    )
+
+    @Test fun rootListsTopFoldersWithTotals() {
+        val top = com.amosley.signal.data.PhoneLibrary.children("", all)
+        assertEquals(listOf("DCIM", "Movies", "Music"), top.map { it.path })
+        assertEquals(15, top.first { it.path == "Music" }.audio)
+    }
+
+    @Test fun drillsDown() {
+        assertEquals(listOf("Music/Suno"), com.amosley.signal.data.PhoneLibrary.children("Music", all).map { it.path })
+    }
+
+    @Test fun movieTitleFromItsFolder() {
+        val v = Movie("locv:1", Origin.PHONE, "inception", folder = "Movies/Inception (2010)")
+        val out = com.amosley.signal.data.PhoneLibrary.split(emptyList(), listOf(v), mapOf("Movies" to com.amosley.signal.data.PhoneFolderType.MOVIES))
+        assertEquals("Inception", out.movies.single().title)
+        assertEquals(2010, out.movies.single().year)
+    }
+}

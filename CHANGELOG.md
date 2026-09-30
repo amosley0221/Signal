@@ -3,6 +3,30 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.7] - 2026-09-30
+
+### PC library shows up while it scans (Signal Agent)
+- Fixed: nothing appeared on the phone until **every** PC folder had finished scanning. A big TV folder could hide
+  a fully scanned music library for a long time. Each folder now appears as soon as it's done.
+- Large folders show up bit by bit while they scan: every few hundred files, instead of all at the end.
+- Scan progress is saved as it goes, so restarting the PC or the agent doesn't start the scan over.
+- A single damaged or very slow video file can no longer hold up the scan: it's skipped after 30 seconds.
+- Video folders scan faster (more files read at once).
+- While the PC is still scanning, the phone checks for new items every minute instead of every 10.
+
+### Phone folder picker
+- **Settings → Folders on this phone** is now a folder browser. Tap **+ Add a folder**, start at the top of your
+  phone's storage, open folders, then choose **Use this folder for Music / Music Videos / Movies / TV Shows**.
+- Everything inside the folder is included and organised automatically:
+  - **Music** uses its tags (artist and album).
+  - **TV Shows** reads Show / Season folders and names like `S01E02`.
+  - **Movies** reads names like `Title (2010)`, from either the file or its folder.
+- Your chosen folders are listed with **Change** and **Remove** buttons.
+
+### Fixes
+- The phone now shows the PC's current Signal Agent version. It used to keep showing the version from when you
+  first paired (1.0.0).
+
 ## [1.0.6] - 2026-09-30
 
 ### Favorites

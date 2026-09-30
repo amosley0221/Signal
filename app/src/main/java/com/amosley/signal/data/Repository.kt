@@ -223,8 +223,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             if (p.remoteUrl != null && _settings.value.remoteMode != RemoteMode.HOME_ONLY) add(p.remoteUrl to true)
         }
         for ((url, remote) in candidates) {
-            val ok = runCatching { agent.info(url) }.isSuccess
-            if (ok) {
+            val info = runCatching { agent.info(url) }.getOrNull()
+            if (info != null) {
+                // Keep the PC's name and version current (they change when the agent updates or is renamed).
+                if (info.version != p.agentVersion || info.name != p.name || info.plex != p.plex) {
+                    updateSettings { s -> s.copy(pc = s.pc?.copy(agentVersion = info.version, name = info.name, plex = info.plex)) }
+                }
                 _status.update { it.copy(reachable = true, checking = false, baseUrl = url, viaRemote = remote, error = null) }
                 return url
             }
@@ -266,8 +270,10 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         if (autoRefresh?.isActive == true) return
         autoRefresh = scope.launch {
             while (true) {
-                refreshNow()
-                delay(10 * 60_000L)
+                refreshNow(force = true)
+                // While the PC is still scanning, check every minute so new songs/episodes appear quickly.
+                val scanning = _remoteActivity.value.any { it.kind == "scan" && it.state.equals("running", true) }
+                delay(if (scanning) 60_000L else 10 * 60_000L)
             }
         }
     }
