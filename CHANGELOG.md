@@ -3,6 +3,22 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.15] - 2026-09-30
+
+### Downloads make sense now
+- **Clear choices per library.** In Settings → PC sync, tapping a library's mode opens a menu with four explained options: **Stream**, **Download new**, **Download all** and **Hidden**. Before, each tap moved to the next mode, and one tap past "Download all" hid the whole library.
+- **Switching a library to Stream (or Hidden) stops its queued downloads right away.** Files already downloaded stay on the phone. Songs you download by hand are never cancelled by this.
+- **"Download new" means new.** It only downloads files added to the PC after you chose it. Before, while the PC was still scanning, every song it hadn't reported yet counted as "new", so the phone started downloading most of the library on its own. After an app update, that queue was lost.
+- **Faster downloads.** Three files download at a time instead of one.
+- **Lighter syncing.** Lyrics are looked up once when a song is queued for download. Before, they were requested again for every queued song on every sync, which kept the PC busy.
+
+### Playing when the PC is busy or unreachable
+- If the PC can't be reached, Music, Movies and TV Shows show a warning line again. Tapping a song that can't play now explains why, instead of doing nothing.
+- The phone now waits longer for a busy PC before deciding it's unreachable, and it checks again every 30 seconds instead of every 10 minutes.
+
+### Signal Agent (PC)
+- The agent stays responsive while it scans. Progress is shared with the phone at most every 30 seconds, the library index is saved in a compact form, and the catalogue is prepared once per change instead of for every request.
+
 ## [1.0.14] - 2026-09-30
 
 ### App

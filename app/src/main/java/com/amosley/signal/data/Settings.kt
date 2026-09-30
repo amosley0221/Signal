@@ -26,6 +26,8 @@ data class Settings(
     val pc: PairedPc? = null,
     /** Library id → mode. Libraries missing from the map are not synced at all. */
     val libModes: Map<String, LibMode> = emptyMap(),
+    /** Library id → when its mode was last set. "Download new" only downloads files the PC added after this. */
+    val libModeSince: Map<String, Long> = emptyMap(),
     val remoteMode: RemoteMode = RemoteMode.TAILSCALE,
     val wifiOnly: Boolean = true,
     val dlQualityLossless1644: Boolean = false,

@@ -341,7 +341,9 @@ class Repository(val context: Context, val scope: CoroutineScope) {
                 refreshNow(force = true)
                 // While the PC is still scanning, check every minute so new songs/episodes appear quickly.
                 val scanning = _remoteActivity.value.any { it.kind == "scan" && it.state.equals("running", true) }
-                delay(if (scanning) 60_000L else 10 * 60_000L)
+                // Couldn't reach the PC (busy, or Wi-Fi just changed): try again soon instead of in 10 minutes.
+                val unreachable = pc != null && !_status.value.reachable
+                delay(if (unreachable) 30_000L else if (scanning) 60_000L else 10 * 60_000L)
             }
         }
     }
@@ -360,14 +362,21 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     fun savePairing(pc: PairedPc, libModes: Map<String, LibMode>, remote: RemoteMode) {
-        updateSettings { it.copy(pc = pc, libModes = libModes, remoteMode = remote, skippedPairing = false, importReviewedAt = System.currentTimeMillis()) }
+        val now = System.currentTimeMillis()
+        updateSettings { it.copy(pc = pc, libModes = libModes, libModeSince = libModes.mapValues { now }, remoteMode = remote, skippedPairing = false, importReviewedAt = now) }
         meta = meta.copy(knownIds = emptySet())
         metaStore.save(meta)
         _status.value = PcStatus(paired = true)
     }
 
+    /** Hides a PC library on this phone (its rule-queued downloads stop; downloaded files stay). */
+    fun clearLibMode(libId: String) {
+        updateSettings { it.copy(libModes = it.libModes - libId, libModeSince = it.libModeSince - libId) }
+        scope.launch { applyLibraryRules(_catalog.value) }
+    }
+
     fun setLibMode(libId: String, mode: LibMode) {
-        updateSettings { it.copy(libModes = it.libModes + (libId to mode)) }
+        updateSettings { it.copy(libModes = it.libModes + (libId to mode), libModeSince = it.libModeSince + (libId to System.currentTimeMillis())) }
         scope.launch { applyLibraryRules(_catalog.value) }
     }
 
@@ -400,46 +409,54 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     // ---- Downloads & library rules ------------------------------------------------------------
 
-    fun download(track: Track) {
+    fun download(track: Track, auto: Boolean = false) {
         if (track.origin != Origin.PC) return
-        downloads.enqueue(DlRequest(track.id, "track", track.title, track.container ?: "bin", track.size))
-        scope.launch { lyrics(track) }
+        // Fetch lyrics only when the song is newly queued, not on every sync.
+        if (downloads.enqueue(DlRequest(track.id, "track", track.title, track.container ?: "bin", track.size, auto))) scope.launch { lyrics(track) }
     }
-    fun download(video: MusicVideo) = downloads.enqueue(DlRequest(video.id, "video", video.title, video.container ?: "mp4", video.size))
-    fun download(movie: Movie) { if (movie.origin == Origin.PC) downloads.enqueue(DlRequest(movie.id, "movie", movie.title, movie.container ?: "mkv", movie.size)) }
-    fun download(ep: Episode, show: Show) = downloads.enqueue(DlRequest(ep.id, "episode", "${show.title} · S${ep.season}E${ep.episode}", ep.container ?: "mkv", ep.size))
+    fun download(video: MusicVideo, auto: Boolean = false) { downloads.enqueue(DlRequest(video.id, "video", video.title, video.container ?: "mp4", video.size, auto)) }
+    fun download(movie: Movie, auto: Boolean = false) { if (movie.origin == Origin.PC) downloads.enqueue(DlRequest(movie.id, "movie", movie.title, movie.container ?: "mkv", movie.size, auto)) }
+    fun download(ep: Episode, show: Show, auto: Boolean = false) { downloads.enqueue(DlRequest(ep.id, "episode", "${show.title} · S${ep.season}E${ep.episode}", ep.container ?: "mkv", ep.size, auto)) }
 
     private fun applyLibraryRules(cat: Catalog) {
-        val s = _settings.value
-        val firstSync = meta.knownIds.isEmpty()
+        var s = _settings.value
+        val now = System.currentTimeMillis()
+        // Libraries set before "since" was recorded: count from now, so an update doesn't start downloading everything.
+        val missing = s.libModes.keys.filter { it !in s.libModeSince }
+        if (missing.isNotEmpty()) {
+            updateSettings { st -> st.copy(libModeSince = st.libModeSince + missing.associateWith { now }) }
+            s = _settings.value
+        }
         val allIds = HashSet<String>()
+        val wanted = HashSet<String>()
         fun mode(lib: String?) = lib?.let { s.libModes[it] } ?: LibMode.STREAM
-        fun isNew(id: String) = !firstSync && id !in meta.knownIds
+        /** "Download new" = added to the PC after the mode was chosen (by file date, so restarts and partial scans don't matter). */
+        fun want(lib: String?, addedAt: Long): Boolean {
+            val m = mode(lib)
+            return m == LibMode.DOWNLOAD_ALL || (m == LibMode.DOWNLOAD_NEW && addedAt > (lib?.let { s.libModeSince[it] } ?: now))
+        }
         cat.tracks.forEach { t ->
             allIds += t.id
-            val m = mode(t.libraryId)
-            if (m == LibMode.DOWNLOAD_ALL || (m == LibMode.DOWNLOAD_NEW && isNew(t.id))) download(t.copy(origin = Origin.PC))
+            if (want(t.libraryId, t.addedAt)) { wanted += t.id; download(t.copy(origin = Origin.PC), auto = true) }
         }
         cat.videos.forEach { v ->
             allIds += v.id
-            val m = mode(v.libraryId)
-            if (m == LibMode.DOWNLOAD_ALL || (m == LibMode.DOWNLOAD_NEW && isNew(v.id))) download(v)
+            if (want(v.libraryId, v.addedAt)) { wanted += v.id; download(v, auto = true) }
         }
         cat.movies.forEach { mv ->
             allIds += mv.id
-            val m = mode(mv.libraryId)
-            if (!mv.watched && (m == LibMode.DOWNLOAD_ALL || (m == LibMode.DOWNLOAD_NEW && isNew(mv.id)))) download(mv)
+            if (!mv.watched && want(mv.libraryId, mv.addedAt)) { wanted += mv.id; download(mv, auto = true) }
         }
-        val now = System.currentTimeMillis()
         cat.shows.forEach { show ->
             val m = mode(show.libraryId)
             val eps = show.allEpisodes
             eps.forEach { allIds += it.id }
-            when (m) {
-                LibMode.DOWNLOAD_ALL -> eps.filter { !it.watched }.forEach { download(it, show) }
-                LibMode.DOWNLOAD_NEW -> eps.filter { !it.watched }.take(s.keepEpisodes).forEach { download(it, show) }
-                LibMode.STREAM -> Unit
+            val pick = when (m) {
+                LibMode.DOWNLOAD_ALL -> eps.filter { !it.watched }
+                LibMode.DOWNLOAD_NEW -> eps.filter { !it.watched }.take(s.keepEpisodes)
+                LibMode.STREAM -> emptyList()
             }
+            pick.forEach { wanted += it.id; download(it, show, auto = true) }
             if (s.autoRemoveWatched) {
                 eps.filter { it.watched && downloads.isDownloaded(it.id) }.forEach { ep ->
                     val at = meta.watchedAt[ep.id] ?: now.also { meta = meta.copy(watchedAt = meta.watchedAt + (ep.id to it)) }
@@ -447,6 +464,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
                 }
             }
         }
+        downloads.cancelAutoExcept(wanted)
         meta = meta.copy(knownIds = allIds)
         metaStore.save(meta)
     }

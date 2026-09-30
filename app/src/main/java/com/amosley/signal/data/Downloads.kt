@@ -32,7 +32,8 @@ sealed interface DlState {
     data class Done(val file: DownloadedFile) : DlState
 }
 
-data class DlRequest(val id: String, val kind: String, val title: String, val ext: String, val size: Long)
+/** [auto] = queued by a library's Download new / Download all rule (cancelled again if the rule changes). */
+data class DlRequest(val id: String, val kind: String, val title: String, val ext: String, val size: Long, val auto: Boolean = false)
 
 /**
  * Downloads PC items into app-private storage. Resumable (HTTP Range), retries 3× with back-off,
@@ -51,7 +52,7 @@ class Downloads(
     val states: StateFlow<Map<String, DlState>> = _states
     private val pending = ArrayDeque<DlRequest>()
     private val requests = mutableMapOf<String, DlRequest>()
-    private var worker: Job? = null
+    private val workers = mutableListOf<Job>()
     private val _titles = MutableStateFlow<Map<String, String>>(emptyMap())
     val titles: StateFlow<Map<String, String>> = _titles
     var onQueueActive: (Boolean) -> Unit = {}
@@ -63,15 +64,31 @@ class Downloads(
     fun usedBytes(): Long = _states.value.values.sumOf { (it as? DlState.Done)?.file?.size ?: 0L }
     fun freeBytes(): Long = runCatching { StatFs(context.filesDir.path).availableBytes }.getOrDefault(0L)
 
+    /** Queues a download. Returns false if it was already downloaded, running or queued. */
     @Synchronized
-    fun enqueue(req: DlRequest) {
+    fun enqueue(req: DlRequest): Boolean {
         val cur = state(req.id)
-        if (cur is DlState.Done || cur is DlState.Running || (cur is DlState.Queued && requests.containsKey(req.id))) return
+        if (cur is DlState.Done || cur is DlState.Running || (cur is DlState.Queued && requests.containsKey(req.id))) {
+            // Asking by hand for something a rule queued keeps it even if the rule is switched off later.
+            if (!req.auto) requests[req.id]?.let { old -> if (old.auto) requests[req.id] = old.copy(auto = false) }
+            return false
+        }
         requests[req.id] = req
         pending.addLast(req)
         _titles.update { it + (req.id to req.title) }
         _states.update { it + (req.id to DlState.Queued()) }
         ensureWorker()
+        return true
+    }
+
+    /** Drops rule-queued downloads that are no longer wanted (e.g. a library switched from Download all to Stream). */
+    @Synchronized
+    fun cancelAutoExcept(wanted: Set<String>) {
+        val drop = pending.filter { it.auto && it.id !in wanted }.map { it.id }.toSet()
+        if (drop.isEmpty()) return
+        pending.removeAll { it.id in drop }
+        drop.forEach { requests.remove(it); File(dir, "$it.part").delete() }
+        _states.update { m -> m.filterKeys { it !in drop || m[it] is DlState.Done } }
     }
 
     @Synchronized
@@ -101,20 +118,28 @@ class Downloads(
         store.save(_states.value.mapNotNull { (k, v) -> (v as? DlState.Done)?.let { k to it.file } }.toMap())
     }
 
+    /** Runs up to [PARALLEL] downloads at once; small files like songs go much faster than one at a time. */
     @Synchronized
     private fun ensureWorker() {
-        if (worker?.isActive == true) return
-        onQueueActive(true)
-        worker = scope.launch(Dispatchers.IO) {
-            try {
-                while (isActive) {
-                    val next = synchronized(this@Downloads) { pending.removeFirstOrNull() } ?: break
-                    runOne(next)
+        workers.removeAll { !it.isActive }
+        if (workers.isEmpty()) onQueueActive(true)
+        while (workers.size < PARALLEL && workers.size < pending.size) {
+            workers += scope.launch(Dispatchers.IO) {
+                try {
+                    while (isActive) {
+                        val next = synchronized(this@Downloads) { pending.removeFirstOrNull() } ?: break
+                        runOne(next)
+                    }
+                } finally {
+                    val idle = synchronized(this@Downloads) { workers.remove(coroutineContext[Job]); workers.none { it.isActive } }
+                    if (idle) onQueueActive(false)
                 }
-            } finally {
-                onQueueActive(false)
             }
         }
+    }
+
+    companion object {
+        const val PARALLEL = 3
     }
 
     private fun onWifi(): Boolean {

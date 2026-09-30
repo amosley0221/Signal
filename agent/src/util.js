@@ -48,10 +48,10 @@ export function toPosix(p) {
   return p.split(path.sep).join('/').replace(/\\/g, '/');
 }
 
-export async function writeJsonAtomic(file, data) {
+export async function writeJsonAtomic(file, data, indent = 2) {
   await fsp.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(data, null, 2));
+  await fsp.writeFile(tmp, JSON.stringify(data, null, indent || undefined));
   await fsp.rename(tmp, file);
 }
 

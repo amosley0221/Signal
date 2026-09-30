@@ -21,6 +21,8 @@ const stripTrackNo = (s) => s.replace(/^\d{1,3}(?:[\s.\-_]+|\s*-\s*)/, '').trim(
 const PUBLISH_EVERY = 400;
 // How many library folders scan at the same time.
 const SCAN_PARALLEL = 3;
+// Minimum time between progress publishes during a scan.
+const PUBLISH_MIN_MS = 30_000;
 const META_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms, message) {
   let t;
@@ -38,6 +40,7 @@ export class Catalog {
     this.plex = plex && plex.enabled ? plex : null;
     this.log = log || (() => {});
     this.cacheFile = path.join(config.dataDir, 'catalog.json');
+    this.lastPublishAt = 0;
     this.cache = { version: CACHE_VERSION, libs: {} };
     this.libraries = [];
     this.index = new Map();
@@ -166,7 +169,8 @@ export class Catalog {
       do {
         this.saveAgain = false;
         try {
-          await writeJsonAtomic(this.cacheFile, this.cache);
+          // Compact: the index of a big library is large, and pretty-printing it only slows every save.
+          await writeJsonAtomic(this.cacheFile, this.cache, 0);
         } catch (e) {
           this.log(`[scan] could not save cache: ${e.message}`);
         }
@@ -232,7 +236,9 @@ export class Catalog {
     let sincePublish = 0;
     let publishing = false;
     const publish = async () => {
-      if (publishing) return;
+      // Several libraries scan at once: publish at most every PUBLISH_MIN_MS overall so the agent stays responsive.
+      if (publishing || Date.now() - this.lastPublishAt < PUBLISH_MIN_MS) return;
+      this.lastPublishAt = Date.now();
       publishing = true;
       sincePublish = 0;
       this.cache.libs[lib.id] = { files: { ...prev, ...next }, shows: this.cache.libs[lib.id]?.shows || {}, lastScan: this.cache.libs[lib.id]?.lastScan || null };

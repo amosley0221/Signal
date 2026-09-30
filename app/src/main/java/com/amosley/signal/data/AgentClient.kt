@@ -62,7 +62,7 @@ class AgentClient(private val http: OkHttpClient) {
         return text
     }
 
-    suspend fun info(base: String): AgentInfo = SignalJson.decodeFromString(call(base, "/api/info", null, timeoutSec = 4))
+    suspend fun info(base: String): AgentInfo = SignalJson.decodeFromString(call(base, "/api/info", null, timeoutSec = 10))
 
     suspend fun pairStart(base: String, deviceName: String): PairStart =
         SignalJson.decodeFromString(call(base, "/api/pair/start", null, SignalJson.encodeToString(PairStartBody.serializer(), PairStartBody(deviceName)).toRequestBody(jsonType)))

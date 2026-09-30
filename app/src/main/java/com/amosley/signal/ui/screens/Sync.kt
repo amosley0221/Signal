@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -156,17 +159,24 @@ fun SyncScreen(c: Ctx) {
                                 Mono(lib.path, style = T.metaMono, color = C.Faint)
                                 Mono("${lib.count} files · ${Fmt.bytes(lib.bytes)}", style = T.metaMono, color = C.Faint)
                             }
-                            Box(
-                                Modifier.border(1.dp, if (mode == null) C.HairStrong else C.Amber).clickable {
-                                    // Off → Stream → Download new → Download all → Off
-                                    val next = when (mode) {
-                                        null -> LibMode.STREAM
-                                        LibMode.DOWNLOAD_ALL -> null
-                                        else -> mode.next()
+                            var open by remember { mutableStateOf(false) }
+                            Box {
+                                Box(
+                                    Modifier.border(1.dp, if (mode == null) C.HairStrong else C.Amber).clickable { open = true }
+                                        .padding(horizontal = 9.dp, vertical = 6.dp),
+                                ) { Text("${mode?.label ?: "Hidden"} ▾", style = T.mono(11.sp, 600, 0.04.sp), color = if (mode == null) C.Faint else C.AmberText) }
+                                DropdownMenu(open, onDismissRequest = { open = false }, containerColor = C.Surface) {
+                                    fun pick(m: LibMode?) {
+                                        open = false
+                                        if (m == mode) return
+                                        if (m == null) repo.clearLibMode(lib.id) else repo.setLibMode(lib.id, m)
                                     }
-                                    if (next == null) repo.updateSettings { it.copy(libModes = it.libModes - lib.id) } else repo.setLibMode(lib.id, next)
-                                }.padding(horizontal = 9.dp, vertical = 6.dp),
-                            ) { Text("${mode?.label ?: "Off"} ▾", style = T.mono(11.sp, 600, 0.04.sp), color = if (mode == null) C.Faint else C.AmberText) }
+                                    LibModeItem("Stream", "Play from ${pc.name} over Wi-Fi or Tailscale. Nothing is stored on the phone except what you download yourself.", mode == LibMode.STREAM) { pick(LibMode.STREAM) }
+                                    LibModeItem("Download new", "Stream everything, and download files added to ${pc.name} from now on.", mode == LibMode.DOWNLOAD_NEW) { pick(LibMode.DOWNLOAD_NEW) }
+                                    LibModeItem("Download all", "Keep a copy of every file on this phone, so it plays without ${pc.name}.", mode == LibMode.DOWNLOAD_ALL) { pick(LibMode.DOWNLOAD_ALL) }
+                                    LibModeItem("Hidden", "Don't show this library on the phone. Files already downloaded stay.", mode == null) { pick(null) }
+                                }
+                            }
                         }
                     }
                 }
@@ -674,4 +684,17 @@ private fun AgentUpdateCard(c: Ctx) {
             }
         }
     }
+}
+
+@Composable
+private fun LibModeItem(title: String, detail: String, on: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Column(Modifier.widthIn(max = 280.dp).padding(vertical = 4.dp)) {
+                Text(title + if (on) "  ✓" else "", style = T.ui(14.sp, 600), color = if (on) C.AmberText else C.Fg)
+                Text(detail, style = T.ui(12.sp), color = C.Muted)
+            }
+        },
+        onClick = onClick,
+    )
 }

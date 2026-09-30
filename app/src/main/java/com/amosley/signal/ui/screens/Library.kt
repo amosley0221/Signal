@@ -135,7 +135,12 @@ fun LibraryPane(c: Ctx) {
                             SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
                         }
                     }
-                    // PC connection status lives in Settings only.
+                    // PC status lives in Settings; here only a problem is shown (songs can't stream while the PC is unreachable).
+                val s = c.status
+                if (c.settings.pc != null && (c.settings.offline || (!s.reachable && !s.checking))) {
+                    Spacer(Modifier.height(8.dp))
+                    StatusLine(c)
+                }
                     if (c.unfolded) {
                         Spacer(Modifier.height(14.dp))
                         Row(Modifier.fillMaxWidth().border(1.dp, C.HairStrong)) {
@@ -246,7 +251,10 @@ fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
         SongRow(
             t = t, artModel = c.art(t), dl = c.dlState(t.id),
             isCurrent = c.player.current?.id == t.id, playing = c.player.playing, unavailable = c.unavailable(t),
-            onPlay = { c.st.playFrom(c.app, list, t) },
+            onPlay = {
+                if (c.unavailable(t)) c.toast(if (c.settings.offline) "Offline mode is on · only downloaded songs play" else "Can't reach ${c.pcName} · only downloaded songs play until it's back")
+                else c.st.playFrom(c.app, list, t)
+            },
             onArtist = { c.st.openArtist(it) },
             onMore = { c.st.sheet = Sheet.Actions(t.id) },
             favorite = c.isFavorite(t.id),

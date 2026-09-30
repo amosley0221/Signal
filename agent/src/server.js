@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { spawn } from 'node:child_process';
 import { parseRange } from './range.js';
 import { suggestArtists } from './suggest.js';
@@ -29,6 +30,7 @@ function sendJson(req, res, status, obj) {
   res.end(req.method === 'HEAD' ? undefined : body);
 }
 
+const gzip = promisify(zlib.gzip);
 const notFound = (req, res) => sendJson(req, res, 404, { error: 'not_found' });
 const badRequest = (req, res) => sendJson(req, res, 400, { error: 'bad_request' });
 
@@ -127,7 +129,21 @@ export function createServer(agent) {
 
   // ---- authenticated ----
   route('GET', '/api/libraries', (req, res) => sendJson(req, res, 200, agent.catalog.getLibraries()));
-  route('GET', '/api/catalog', (req, res) => sendJson(req, res, 200, agent.catalog.getCatalog()));
+  // The catalogue can be many MB: serialize and gzip it once per build (asynchronously), not on every request,
+  // so the agent keeps answering while a big library scans.
+  let catalogBody = null;
+  route('GET', '/api/catalog', async (req, res) => {
+    const cat = agent.catalog.getCatalog();
+    if (catalogBody?.cat !== cat) {
+      const body = Buffer.from(JSON.stringify(cat));
+      catalogBody = { cat, body, gz: await gzip(body) };
+    }
+    const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+    const useGz = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+    const out = useGz ? catalogBody.gz : catalogBody.body;
+    res.writeHead(200, { ...headers, 'Content-Length': out.length, ...(useGz ? { 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' } : {}) });
+    res.end(req.method === 'HEAD' ? undefined : out);
+  });
   route('GET', '/api/activity', (req, res) => sendJson(req, res, 200, activity.list()));
 
   route('POST', '/api/rescan', (req, res) => {
