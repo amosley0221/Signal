@@ -36,7 +36,7 @@ before(async () => {
         ratingKey: '101', title: 'Low Orbit', year: 2025, summary: 'Space.', audienceRating: 7.9, contentRating: 'PG-13',
         Genre: [{ tag: 'Sci-fi' }], Director: [{ tag: 'A. Director' }], Role: [{ tag: 'Actor One' }, { tag: 'Actor Two' }],
         thumb: '/library/metadata/101/thumb/1', art: '/library/metadata/101/art/1', viewOffset: 2500000, duration: 7440000,
-        Guid: [{ id: 'tmdb://123' }], Media: [{ Part: [{ file: movieFile }] }],
+        Guid: [{ id: 'tmdb://123' }], Media: [{ width: 1920, height: 1080, duration: 7440000, Part: [{ file: movieFile }] }],
       }] } });
     }
     if (u.pathname === '/library/sections/2/all' && u.searchParams.get('type') === '4') {
@@ -130,4 +130,12 @@ test("Plex's Continue Watching row is passed to the phone as item ids", async ()
   const c = await (await api('/api/catalog')).json();
   const ep = c.shows[0].seasons[0].episodes[0];
   assert.deepEqual(c.continueWatching, [ep.id]);
+});
+
+test('videos Plex already knows are not opened: length and resolution come from Plex', async () => {
+  const c = await (await api('/api/catalog')).json();
+  const m = c.movies[0];
+  assert.equal(m.durationMs, 7440000);
+  assert.equal(m.width, 1920);
+  assert.equal(m.height, 1080);
 });

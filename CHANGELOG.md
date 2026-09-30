@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.31] - 2026-10-01
+
+### Much faster TV and movie scans
+- **Signal Agent (PC):** a video that Plex already knows no longer has to be opened during a scan. Its length and resolution come from Plex instead. Without ffprobe on the PC, reading each large video file could take several seconds or more, which made a big TV folder take hours. Videos Plex doesn't know are still read from the file.
+- Update the agent: the scan picks up where it left off, and the remaining episodes go quickly.
+- Chapter lists for these videos aren't read from the file anymore, so the player may not list chapters for them.
+
 ## [1.0.30] - 2026-10-01
 
 ### Signal Agent restarts itself instead of staying closed

@@ -329,7 +329,12 @@ export class Catalog {
       entry = { ...cached };
     } else {
       let meta;
-      try {
+      // Plex already measured this video (length, resolution): use that instead of opening a multi-GB file.
+      // Without ffprobe on the PC, reading a video can take many seconds, which made big TV folders take hours.
+      const pm = f.kind === 'video' ? this.plex?.match(f.abs)?.media : null;
+      if (pm) {
+        meta = { title: null, artist: null, album: null, year: null, genres: [], durationMs: pm.durationMs, width: pm.width, height: pm.height, hdr: pm.hdr, chapters: [], fromPlex: true };
+      } else try {
         // A damaged or huge file must not stall the whole scan.
         meta = await withTimeout(f.kind === 'audio' ? readAudioMeta(f.abs) : readVideoMeta(f.abs), META_TIMEOUT_MS, `reading ${f.name} took too long`);
       } catch (e) {

@@ -18,6 +18,18 @@ function guidSource(item) {
   return null;
 }
 
+/** What Plex already knows about one file (length, resolution): lets a scan skip reading big video files. */
+function mediaInfo(media, item) {
+  const durationMs = media.duration || item.duration || null;
+  if (!durationMs) return null;
+  return {
+    durationMs,
+    width: media.width || null,
+    height: media.height || null,
+    hdr: /hdr|dolby|dovi/i.test(`${media.videoDynamicRange || ''} ${media.videoProfile || ''}`),
+  };
+}
+
 export class Plex {
   constructor({ url, token }, { clientId = 'signal-agent', log = () => {} } = {}) {
     this.url = String(url || '').replace(/\/+$/, '');
@@ -112,7 +124,7 @@ export class Plex {
         const j = await this.get(`/library/sections/${s.key}/all`, { includeGuids: 1 }, { timeoutMs: 60000 });
         for (const m of j.MediaContainer?.Metadata || []) {
           const info = this.mapMovie(m);
-          for (const media of m.Media || []) for (const part of media.Part || []) if (part.file) add(part.file, info);
+          for (const media of m.Media || []) for (const part of media.Part || []) if (part.file) add(part.file, { ...info, media: mediaInfo(media, m) });
         }
       } else if (s.plexType === 'show') {
         const js = await this.get(`/library/sections/${s.key}/all`, { includeGuids: 1 }, { timeoutMs: 60000 });
@@ -121,7 +133,7 @@ export class Plex {
         const je = await this.get(`/library/sections/${s.key}/all`, { type: 4, includeGuids: 1 }, { timeoutMs: 120000 });
         for (const e of je.MediaContainer?.Metadata || []) {
           const info = this.mapEpisode(e);
-          for (const media of e.Media || []) for (const part of media.Part || []) if (part.file) add(part.file, info);
+          for (const media of e.Media || []) for (const part of media.Part || []) if (part.file) add(part.file, { ...info, media: mediaInfo(media, e) });
         }
       }
     }
