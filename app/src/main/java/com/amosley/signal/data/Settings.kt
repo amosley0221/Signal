@@ -51,6 +51,8 @@ data class Settings(
     val onlineLyrics: Boolean = true,
     /** Look up posters/summaries online (iTunes, TVmaze) for movies and shows that are only on the phone. */
     val onlineVideoInfo: Boolean = true,
+    /** Songs on both the phone and the PC: which copy to show (or both). */
+    val duplicates: com.amosley.signal.core.DuplicateMode = com.amosley.signal.core.DuplicateMode.PHONE,
     /** Chosen sort for each library tab. */
     val sorts: Map<com.amosley.signal.core.SortTab, com.amosley.signal.core.SortPref> = emptyMap(),
 )

@@ -130,6 +130,23 @@ fun SettingsScreen(c: Ctx) {
                     "For videos only on this phone: posters and summaries from Apple TV (movies) and TVmaze (shows). Titles in your PC's Plex library use Plex instead.",
                 ) { Toggle(c.settings.onlineVideoInfo) { v -> c.repo.updateSettings { it.copy(onlineVideoInfo = v) }; if (v) c.repo.enrichPhoneVideos() } }
                 Spacer(Modifier.height(16.dp))
+                Mono("Songs on both phone and PC", color = C.Muted)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "The same song (title, artist, album and length) on this phone and on ${c.pcName} shows once. Choose which copy plays: the phone copy works without the PC; the PC copy keeps edits and lyrics in sync.",
+                    style = T.ui(13.sp), color = C.Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.amosley.signal.core.DuplicateMode.entries.forEach { m ->
+                        val on = c.settings.duplicates == m
+                        Box(
+                            Modifier.background(if (on) C.Amber else Color.Transparent).border(1.dp, if (on) C.Amber else C.HairStrong)
+                                .clickable { c.repo.updateSettings { it.copy(duplicates = m) } }.padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) { Text(m.label, style = T.ui(12.5.sp, 600), color = if (on) C.OnAmber else C.Fg) }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
                 Mono("Folders on this phone", color = C.Muted)
                 Spacer(Modifier.height(6.dp))
                 Text(

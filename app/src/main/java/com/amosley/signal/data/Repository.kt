@@ -177,6 +177,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             .map { t -> overrides[t.id]?.let { t.copy(artist = it) } ?: t }
             .map { t -> edits[t.id]?.apply(t) ?: t }
             .filter { avail(it.id, it.origin) }
+            .let { com.amosley.signal.core.Duplicates.merge(it, s.duplicates) }
         val videos = cat.videos.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.musicVideos
         // Phone videos that are also in the PC/Plex library show Plex's details but play from the phone.
         val pcMovies = cat.movies.filter { libOk(it.libraryId) }

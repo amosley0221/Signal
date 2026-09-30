@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.17] - 2026-09-30
+
+### No more duplicate songs
+- A song that is both on your phone and on the PC now shows once instead of twice. This happens, for example, when you copy an album from the phone into the PC's music folder. Songs count as the same when the title, artist, album and length (within 3 seconds) match.
+- In **Settings → Songs on both phone and PC**, choose which copy is shown and played:
+  - **Phone copy** (the default) plays without the PC.
+  - **PC copy** keeps tag edits and lyrics in sync with the PC.
+  - **Show both** lists both copies, as before.
+
 ## [1.0.16] - 2026-09-30
 
 ### Sonos with Tailscale on
