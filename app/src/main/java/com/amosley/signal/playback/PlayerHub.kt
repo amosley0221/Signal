@@ -40,7 +40,7 @@ data class PlayerUi(
 )
 
 /** Volume change per press of the phone's volume buttons while playing on a speaker (0–100 scale). */
-private const val VOLUME_STEP = 3
+const val VOLUME_STEP = 3
 
 enum class OutputKind { PHONE, CAST, SONOS }
 
@@ -333,6 +333,18 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
             it.onAvailableCommandsChanged(cmds)
             it.onDeviceVolumeChanged(sessionPlayer.deviceVolume, false)
         }
+        notifyPlayState()
+    }
+
+    /** Tells the MediaSession whether we're playing (on a speaker the phone's own player is paused). */
+    private fun notifyPlayState() {
+        val playing = sessionPlayer.isPlaying
+        val state = sessionPlayer.playbackState
+        sessionListeners.forEach {
+            it.onPlaybackStateChanged(state)
+            it.onPlayWhenReadyChanged(sessionPlayer.playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
+            it.onIsPlayingChanged(playing)
+        }
     }
 
     /**
@@ -343,6 +355,16 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         override fun addListener(listener: Player.Listener) { sessionListeners += listener; super.addListener(listener) }
         override fun removeListener(listener: Player.Listener) { sessionListeners -= listener; super.removeListener(listener) }
         override fun getDeviceInfo() = if (remoteVolumeActive()) remoteDevice else super.getDeviceInfo()
+        // While a speaker plays, report *its* state: Android only gives the volume buttons to a session that's playing,
+        // and the notification's play/pause should control the speaker.
+        override fun isPlaying() = remote?.state?.value?.playing ?: super.isPlaying()
+        override fun getPlayWhenReady() = remote?.state?.value?.playing ?: super.getPlayWhenReady()
+        override fun getPlaybackState() = if (remote != null && super.getMediaItemCount() > 0) Player.STATE_READY else super.getPlaybackState()
+        override fun getCurrentPosition() = remote?.state?.value?.positionMs ?: super.getCurrentPosition()
+        override fun getContentPosition() = remote?.state?.value?.positionMs ?: super.getContentPosition()
+        override fun play() { val r = remote; if (r != null) r.play() else super.play() }
+        override fun pause() { val r = remote; if (r != null) r.pause() else super.pause() }
+        override fun setPlayWhenReady(playWhenReady: Boolean) { val r = remote; if (r != null) { if (playWhenReady) r.play() else r.pause() } else super.setPlayWhenReady(playWhenReady) }
         override fun getDeviceVolume() = if (remoteVolumeActive()) _remoteVolume.value else super.getDeviceVolume()
         override fun isDeviceMuted() = if (remoteVolumeActive()) false else super.isDeviceMuted()
         override fun getAvailableCommands(): Player.Commands =
@@ -383,8 +405,10 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         exo.pause()
         _ui.update { it.copy(output = output.name, outputKind = output.kind) }
         sendCurrentToRemote(play = wasPlaying || exo.mediaItemCount > 0, startMs = pos)
+        var lastPlaying: Boolean? = null
         remoteJob = scope.launch {
             output.state.collect { st ->
+                if (st.playing != lastPlaying) { lastPlaying = st.playing; notifyPlayState() }
                 _ui.update { it.copy(positionMs = st.positionMs, durationMs = if (st.durationMs > 0) st.durationMs else it.durationMs, playing = st.playing) }
                 if (st.ended) {
                     if (exo.hasNextMediaItem()) exo.seekToNextMediaItem() else _ui.update { it.copy(playing = false) }

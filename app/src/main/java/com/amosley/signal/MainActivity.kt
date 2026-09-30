@@ -36,6 +36,25 @@ class MainActivity : ComponentActivity() {
         app.hub.connectSession()
     }
 
+    /**
+     * Volume buttons while music plays on a Sonos speaker: change the speaker's volume (not the phone's).
+     * Handled here so it always works while Signal is open; in the background the MediaSession does it.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        val hub = app.hub
+        val up = event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP
+        val down = event.keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN
+        val r = hub.remoteOutput
+        if ((up || down) && r != null && r.supportsVolume) {
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                hub.setRemoteVolume(hub.remoteVolume.value + if (up) com.amosley.signal.playback.VOLUME_STEP else -com.amosley.signal.playback.VOLUME_STEP)
+                app.toast("${r.name} volume · ${hub.remoteVolume.value}")
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onResume() {
         super.onResume()
         app.repo.refresh()

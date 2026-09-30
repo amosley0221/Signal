@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.40] - 2026-10-01
+
+- **Sonos volume buttons, take two.** While music plays on a Sonos speaker, the phone's volume buttons now change the speaker's volume whenever Signal is open, and the new volume shows briefly on screen. In 1.0.39 Android kept the buttons on the phone, because Signal's own player was paused while the speaker played.
+- In the background (screen off or another app open), Signal now tells Android it's playing on the speaker. This lets the volume buttons reach the speaker there too, and the notification's play/pause now controls the speaker.
+
 ## [1.0.39] - 2026-10-01
 
 - **Sonos:** the phone's volume buttons now control the speaker while music plays on Sonos, including the whole group when rooms are grouped. The phone's volume panel shows the speaker's volume, and the slider in **Play on** follows along. On the phone speaker or headphones, the buttons work as usual.
