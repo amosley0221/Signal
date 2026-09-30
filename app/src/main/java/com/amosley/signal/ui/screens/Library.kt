@@ -354,28 +354,10 @@ private fun EmptyLibrary(c: Ctx) {
 private fun LazyListScope.songs(c: Ctx, jump: JumpIndex) {
     val pref = sortPref(c, SortTab.SONGS)
     val all = Sorting.songs(c.lib.tracks, pref)
-    val missing = untagged(c)
     counted(jump) {
         Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FilledBtn("Play", icon = Icons.Filled.PlayArrow, modifier = Modifier.weight(1f)) { c.hub.playList(all, 0) }
             FilledBtn("Shuffle", icon = Icons.Filled.Shuffle, bg = Color.White.copy(alpha = 0.1f), fg = C.Fg, modifier = Modifier.weight(1f)) { c.hub.shuffleAll(all) }
-        }
-    }
-    if (missing.isNotEmpty()) counted(jump) {
-        Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
-            CardBox {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(30.dp).background(C.Amber), contentAlignment = Alignment.Center) {
-                        Text("?", style = T.ui(16.sp, 700), color = C.OnAmber)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("${missing.size} song${if (missing.size > 1) "s" else ""} have no artist", style = T.rowSecondary)
-                        Text("Suggest fictional names from title, lyrics and mood", style = T.ui(12.5.sp), color = C.Muted)
-                    }
-                    OutlineBtn("Fix", color = C.AmberText, border = C.Amber) { c.st.sheet = Sheet.Batch }
-                }
-            }
         }
     }
     counted(jump) { SortBar(c, SortTab.SONGS, Modifier.padding(top = 8.dp)) }

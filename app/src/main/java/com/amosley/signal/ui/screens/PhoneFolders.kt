@@ -43,6 +43,7 @@ import com.amosley.signal.data.PhoneFolderType
 import com.amosley.signal.data.PhoneLibrary
 import com.amosley.signal.ui.Ctx
 import com.amosley.signal.ui.Screen
+import com.amosley.signal.ui.Sheet
 import com.amosley.signal.ui.components.Hairline
 import com.amosley.signal.ui.components.Mono
 import com.amosley.signal.ui.components.OutlineBtn
@@ -118,6 +119,16 @@ fun SettingsScreen(c: Ctx) {
                         )
                     }
                     Icon(Icons.Filled.ChevronRight, null, tint = C.Faint)
+                }
+                // Songs without an artist (moved here from the Songs tab).
+                val missing = untagged(c)
+                if (missing.isNotEmpty()) {
+                    Spacer(Modifier.height(22.dp))
+                    Mono("Music", color = C.Muted)
+                    SettingRow(
+                        "${missing.size} song${if (missing.size > 1) "s have" else " has"} no artist",
+                        "Suggest fictional artist names from the title, lyrics and mood, or match ones you've used before.",
+                    ) { OutlineBtn("Fix", color = C.AmberText, border = C.Amber) { c.st.sheet = Sheet.Batch } }
                 }
                 Spacer(Modifier.height(22.dp))
                 Mono("Lyrics", color = C.Muted)

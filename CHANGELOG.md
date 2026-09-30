@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.34] - 2026-10-01
+
+- The "songs have no artist" card has moved from the top of **Songs** to **Settings → Music**, with the same **Fix** button. The **Needs an artist** smart playlist is still under Playlists.
+
 ## [1.0.33] - 2026-10-01
 
 ### Unfolded: the library uses the whole screen
