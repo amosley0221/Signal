@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -125,7 +126,11 @@ fun NowPlayingContent(c: Ctx, pane: Boolean) {
         }
         return
     }
-    val lyrics by produceState<Lyrics?>(c.repo.cachedLyrics(t.id), t.id) { value = c.repo.lyrics(t) }
+    val loaded by c.repo.lyricsLoaded.collectAsState()
+    val cachedNow = loaded[t.id]
+    // Re-fetch when the song changes or its lyrics are cleared (e.g. after removing your own lyrics).
+    val fetched by produceState<Lyrics?>(cachedNow, t.id, cachedNow == null) { value = cachedNow ?: c.repo.lyrics(t) }
+    val lyrics = cachedNow ?: fetched
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         // Header row
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -279,7 +284,15 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
             !c.settings.onlineLyrics -> "No lyrics found · online lookup is off in Settings"
             else -> "No lyrics found for this song"
         }
-        Box(Modifier.fillMaxSize().alpha(0.45f), contentAlignment = Alignment.Center) { Mono(msg, color = C.Fg, maxLines = 3) }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            Mono(msg, color = C.Fg.copy(alpha = 0.45f), maxLines = 3)
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier.border(1.dp, C.Amber).clickable { c.st.sheet = Sheet.LyricsEditor(t.id) }.padding(horizontal = 14.dp, vertical = 8.dp),
+            ) { Text("ADD LYRICS", style = T.mono(11.sp, 600, 0.1.sp), color = C.AmberText) }
+            Spacer(Modifier.height(6.dp))
+            Mono("Paste from Suno · tap along to sync", style = T.metaMono, color = C.Faint)
+        }
         return
     }
     val mode = c.settings.lyricMode
@@ -304,15 +317,18 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
             }
             Spacer(Modifier.height(8.dp))
         }
-        if (lyrics.source == "lrclib" || !lyrics.synced) {
-            Row {
-                Mono(
-                    listOfNotNull(if (lyrics.source == "lrclib") "Lyrics from LRCLIB" else null, if (!lyrics.synced) "Not time-synced" else null).joinToString(" · "),
-                    style = T.metaMono, color = C.Faint,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Mono(
+                listOfNotNull(
+                    when (lyrics.source) { "lrclib" -> "Lyrics from LRCLIB"; "user" -> "Your lyrics"; else -> null },
+                    if (!lyrics.synced) "Not time-synced" else null,
+                ).joinToString(" · "),
+                style = T.metaMono, color = C.Faint, modifier = Modifier.weight(1f),
+            )
+            Mono(if (lyrics.synced) "Edit" else "Sync", style = T.metaMono, color = C.AmberText,
+                modifier = Modifier.clickable { c.st.sheet = Sheet.LyricsEditor(t.id) }.padding(4.dp))
         }
+        Spacer(Modifier.height(4.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val h = maxHeight
             LaunchedEffect(active, h) {

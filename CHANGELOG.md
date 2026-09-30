@@ -3,6 +3,19 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.2] - 2026-09-30
+
+### Add your own lyrics (great for Suno songs)
+- New lyrics editor. Open it with **Add lyrics** on the Now Playing lyrics screen, or **⋯ → Add / edit lyrics** on any song.
+- **Paste** the lyrics you copied from the Suno app. Section labels like `[Verse]`, `[Chorus]` and `(Instrumental)` are removed automatically.
+- **Tap to sync:** the song plays from the start, and you tap the big button as each line begins.
+  - **Undo** jumps back a few seconds so you can redo a line.
+  - **Finish now** spreads out the lines you haven't tapped yet.
+- Saved lyrics scroll and highlight just like an `.lrc` file. They take priority over lyrics found online.
+- For songs on your PC, the app also writes a real `.lrc` file next to the song. If the song already had one, the old file is kept as `.lrc.bak`.
+- Already have an `.lrc` with timestamps? Paste it and save; no tapping needed.
+- Update **SignalAgent.exe** on the PC to this version so the `.lrc` file can be written there.
+
 ## [1.0.1] - 2026-09-30
 
 ### New Settings tab

@@ -203,6 +203,14 @@ export function createServer(agent) {
     sendJson(req, res, 200, l);
   });
 
+  route('POST', '/api/lyrics/:id', async (req, res, p) => {
+    const body = await readJson(req);
+    if (typeof body.lrc !== 'string' || !body.lrc.trim()) return sendJson(req, res, 400, { error: 'bad_request' });
+    const r = await agent.catalog.saveLyrics(p.id, body.lrc);
+    if (!r) return notFound(req, res);
+    sendJson(req, res, 200, { ok: true });
+  });
+
   route('POST', '/api/tags/:id', async (req, res, p) => {
     const body = await readJson(req);
     const r = await agent.catalog.editTags(p.id, body);

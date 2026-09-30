@@ -48,6 +48,7 @@ sealed interface Sheet {
     data class Actions(val trackId: String) : Sheet
     data class AddTo(val trackId: String) : Sheet
     data class NewPlaylist(val trackId: String? = null) : Sheet
+    data class LyricsEditor(val trackId: String) : Sheet
 }
 
 /** UI navigation state. Library data lives in the Repository; playback in PlayerHub. */

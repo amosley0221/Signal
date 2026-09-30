@@ -95,6 +95,13 @@ fun SheetHost(c: Ctx) {
         ) { NowPlayingContent(c, pane = false) }
         return
     }
+    if (sheet is Sheet.LyricsEditor) {
+        Box(
+            Modifier.fillMaxSize().background(C.Bg).windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(WindowInsets.navigationBars)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+        ) { LyricsEditor(c, sheet.trackId) }
+        return
+    }
     val dismiss = { c.st.sheet = null }
     Box(
         Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
@@ -120,7 +127,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.Actions -> ActionsSheet(c, sheet.trackId)
                 is Sheet.AddTo -> AddToSheet(c, sheet.trackId)
                 is Sheet.NewPlaylist -> NewPlaylistSheet(c, sheet.trackId)
-                is Sheet.NowPlaying -> Unit
+                is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit
             }
         }
     }
@@ -351,6 +358,7 @@ private fun ColumnScope.ActionsSheet(c: Ctx, trackId: String) {
     ActionRow("Add to playlist…") { c.st.sheet = Sheet.AddTo(t.id) }
     if (t.artist != null) ActionRow("Go to artist", t.artist) { c.st.openArtist(t.artist) }
     ActionRow("Edit tags / suggest artist", chip = if (t.artist == null) "No artist" else null) { c.st.sheet = Sheet.Edit(t.id) }
+    ActionRow("Add / edit lyrics", "Paste · tap to sync") { c.st.sheet = Sheet.LyricsEditor(t.id) }
     if (t.origin == Origin.PC) {
         when (val d = c.dlState(t.id)) {
             is DlState.Done -> ActionRow("Remove download", Fmt.bytes(d.file.size)) { c.repo.downloads.remove(t.id); c.st.sheet = null; c.toast("Removed download") }

@@ -168,6 +168,16 @@ test('lyrics, suggestions, tag edit with conflict, activity', async () => {
   const again = await (await api('/api/catalog')).json();
   assert.equal(again.tracks[0].artist, 'Someone Else');
 
+  const saved = await api(`/api/lyrics/${t.id}`, { method: 'POST', body: JSON.stringify({ lrc: '[00:01.00]First line\n[00:03.50]Second line' }) });
+  assert.equal(saved.status, 200);
+  await saved.json();
+  const l2 = await (await api(`/api/lyrics/${t.id}`)).json();
+  assert.deepEqual(l2.lines.map((x) => x.text), ['First line', 'Second line']);
+  assert.equal(l2.lines[1].t, 3.5);
+  const bad = await api(`/api/lyrics/${t.id}`, { method: 'POST', body: JSON.stringify({ lrc: '' }) });
+  assert.equal(bad.status, 400);
+  await bad.text();
+
   const acts = await (await api('/api/activity')).json();
   assert.ok(acts.some((a) => a.kind === 'scan' && a.state === 'done'));
   assert.ok(acts.some((a) => a.kind === 'tag'));

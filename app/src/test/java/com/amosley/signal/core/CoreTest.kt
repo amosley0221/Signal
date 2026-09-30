@@ -82,3 +82,24 @@ class CoreTest {
         assertEquals("2h 04m", Fmt.runtime(124 * 60_000L))
     }
 }
+
+class PastedLyricsTest {
+    @Test fun cleansSunoSectionLabels() {
+        val text = "[Verse 1]\nHeadlights spill across the lane\n\n[Chorus]\nChrome hearts (don't break)\n(Instrumental break)\n  Last line  "
+        assertEquals(listOf("Headlights spill across the lane", "Chrome hearts (don't break)", "Last line"), PastedLyrics.clean(text))
+    }
+
+    @Test fun lrcRoundTrip() {
+        val lines = listOf(LyricLine(1.0, "a"), LyricLine(65.25, "b"))
+        val lrc = PastedLyrics.toLrc(lines, synced = true)
+        assertEquals("[00:01.00]a\n[01:05.25]b", lrc)
+        assertTrue(PastedLyrics.isLrc(lrc))
+        assertEquals(lines.map { it.t }, Lrc.parse(lrc).lines.map { it.t })
+    }
+
+    @Test fun spreadCoversSong() {
+        val s = PastedLyrics.spread(listOf("a", "b", "c"), 120.0)
+        assertEquals(3, s.size)
+        assertTrue(s.last().t < 120.0)
+    }
+}

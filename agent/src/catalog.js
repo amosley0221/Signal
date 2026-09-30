@@ -11,7 +11,7 @@ import {
   readAudioMeta, readVideoMeta, findSidecars, showArt, lrcLanguage, containerFor, readEmbeddedCover, readEmbeddedLyrics,
 } from './media.js';
 import { parseMovieName, parseEpisodeName } from './filenames.js';
-import { loadLyrics } from './lyrics.js';
+import { loadLyrics, lrcPaths } from './lyrics.js';
 import { writeTags, TAG_FIELDS } from './tags.js';
 
 const CACHE_VERSION = 1;
@@ -532,6 +532,28 @@ export class Catalog {
     const it = this.get(id);
     if (!it || it.type !== 'track') return null;
     return loadLyrics(it.abs, () => readEmbeddedLyrics(it.abs));
+  }
+
+  /**
+   * Save lyrics typed/synced on the phone as `<song>.lrc` next to the file. An existing .lrc is
+   * kept once as `<song>.lrc.bak`. Returns null when the id isn't a track.
+   */
+  async saveLyrics(id, lrcText) {
+    const it = this.get(id);
+    if (!it || it.type !== 'track') return null;
+    const { lrc } = lrcPaths(it.abs);
+    const text = String(lrcText || '').replace(/\r\n/g, '\n');
+    const existing = await fsp.readFile(lrc, 'utf8').catch(() => null);
+    if (existing !== null && existing !== text) {
+      await fsp.copyFile(lrc, `${lrc}.bak`, fs.constants.COPYFILE_EXCL).catch(() => {});
+    }
+    await fsp.writeFile(lrc, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
+    if (it.entry) {
+      it.entry.side = { ...(it.entry.side || {}), lrc: path.basename(lrc) };
+      it.entry.lrcMtime = Date.now();
+    }
+    this.markDirty();
+    return { ok: true, file: lrc };
   }
 
   /** Resolve art: {file} | {plex: path} | {data, mime} | null */

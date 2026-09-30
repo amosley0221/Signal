@@ -95,3 +95,32 @@ object Fmt {
         }
     }
 }
+
+/** Helpers for lyrics pasted from Suno (or anywhere) into the lyrics editor. */
+object PastedLyrics {
+    private val sectionLine = Regex("^\\s*[\\[(][^\\])]*[\\])]\\s*$")
+
+    /** Lines to sync: drops section labels like [Verse 1] / [Chorus] / (Instrumental), blank lines and stray spaces. */
+    fun clean(text: String): List<String> =
+        text.replace("\r", "").lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !sectionLine.matches(it) }
+
+    /** True when the pasted text is already an .lrc with timestamps. */
+    fun isLrc(text: String): Boolean = Regex("^\\s*\\[\\d{1,3}:\\d{1,2}([.:]\\d{1,3})?]", RegexOption.MULTILINE).containsMatchIn(text)
+
+    /** Spread lines evenly over the song, as a starting point when the user doesn't tap-sync. */
+    fun spread(lines: List<String>, durationSec: Double): List<LyricLine> {
+        if (lines.isEmpty()) return emptyList()
+        val start = (durationSec * 0.06).coerceAtMost(15.0)
+        val step = ((durationSec - start) / lines.size).coerceAtLeast(1.0)
+        return lines.mapIndexed { i, s -> LyricLine(start + i * step, s) }
+    }
+
+    fun toLrc(lines: List<LyricLine>, synced: Boolean): String = lines.joinToString("\n") { l ->
+        if (!synced) l.text else {
+            val cs = Math.round(l.t * 100).coerceAtLeast(0)
+            String.format(java.util.Locale.ROOT, "[%02d:%02d.%02d]%s", cs / 6000, (cs / 100) % 60, cs % 100, l.text)
+        }
+    }
+}

@@ -367,6 +367,11 @@ class Repository(val context: Context, val scope: CoroutineScope) {
      */
     suspend fun lyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
         _lyrics.value[track.id]?.let { return@withContext it }
+        // Lyrics the user pasted / synced on the phone always win.
+        runCatching { SignalJson.decodeFromString(Lyrics.serializer(), userLyricsFile(track).readText()) }.getOrNull()?.let { mine ->
+            _lyrics.update { it + (track.id to mine) }
+            return@withContext mine
+        }
         val file = File(lyricsDir, safe(track.id) + ".json")
         val primary: Lyrics? = if (track.origin == Origin.PHONE) {
             localLrc(track)
@@ -394,6 +399,30 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         val found = runCatching { onlineLyrics.find(track) }.getOrNull()
         if (found == null) onlineMisses += track.id
         return found
+    }
+
+    private val userLyricsDir = File(files, "lyrics-user").apply { mkdirs() }
+    private fun userLyricsFile(track: Track) = File(userLyricsDir, safe(track.id) + ".json")
+
+    /**
+     * Save lyrics typed or tap-synced on the phone. Kept on the phone (they take priority everywhere) and,
+     * for PC songs, written to `<song>.lrc` on the PC so they travel with the file. Returns a status message.
+     */
+    suspend fun saveUserLyrics(track: Track, lines: List<com.amosley.signal.core.LyricLine>, synced: Boolean): String = withContext(Dispatchers.IO) {
+        val lyrics = Lyrics(lang = null, lines = lines, synced = synced, source = "user")
+        userLyricsFile(track).writeText(SignalJson.encodeToString(Lyrics.serializer(), lyrics))
+        _lyrics.update { it + (track.id to lyrics) }
+        if (track.origin != Origin.PC) return@withContext "Lyrics saved"
+        val p = pc
+        val b = _status.value.baseUrl
+        if (p == null || b == null || !_status.value.reachable) return@withContext "Lyrics saved on this phone · ${pcName} is offline, so the .lrc wasn't written there"
+        runCatching { agent.saveLyrics(b, p.token, track.id, com.amosley.signal.core.PastedLyrics.toLrc(lines, synced)) }
+            .fold({ "Lyrics saved · .lrc written on ${p.name}" }, { "Lyrics saved on this phone · couldn't write the .lrc on ${p.name}" })
+    }
+
+    fun deleteUserLyrics(track: Track) {
+        userLyricsFile(track).delete()
+        refreshLyrics(track)
     }
 
     /** Forget cached lyrics for a song and look again (e.g. after fixing its artist tag). */

@@ -36,6 +36,7 @@ val SignalJson = Json {
 @Serializable private data class PairStartBody(val deviceName: String)
 @Serializable private data class TagBody(val artist: String, val baseMtime: Long, val force: Boolean = false)
 @Serializable private data class ProgressBody(val id: String, val positionMs: Long, val watched: Boolean)
+@Serializable private data class LyricsBody(val lrc: String)
 @Serializable private data class SuggestBody(val trackId: String, val prompt: String)
 
 class AgentException(val code: Int, message: String) : IOException(message)
@@ -73,6 +74,10 @@ class AgentClient(private val http: OkHttpClient) {
     suspend fun catalog(base: String, token: String): Catalog = SignalJson.decodeFromString(call(base, "/api/catalog", token, timeoutSec = 120))
 
     suspend fun lyrics(base: String, token: String, id: String): ApiLyrics = SignalJson.decodeFromString(call(base, "/api/lyrics/$id", token))
+
+    suspend fun saveLyrics(base: String, token: String, id: String, lrc: String) {
+        call(base, "/api/lyrics/$id", token, SignalJson.encodeToString(LyricsBody.serializer(), LyricsBody(lrc)).toRequestBody(jsonType))
+    }
 
     suspend fun activity(base: String, token: String): List<ActivityItem> = SignalJson.decodeFromString(call(base, "/api/activity", token))
 

@@ -89,6 +89,9 @@ URLs in the catalogue are relative to the agent base URL; the app appends the to
   Translation from `<file>.en.lrc` if present.
 
 ### Edits and sync
+- `POST /api/lyrics/:id` body `{"lrc":"[00:01.00]First line\n[00:03.50]Second line"}` → `{"ok":true}`.
+  Writes `<song>.lrc` next to the file (an existing one is kept once as `<song>.lrc.bak`). Used by the phone's
+  lyrics editor (paste + tap-to-sync). `400` for an empty body, `404` for unknown ids.
 - `POST /api/tags/:id` body `{"artist":"Glass Orchard","baseMtime":1790000000000}` →
   `200 {"ok":true,"mtime":<new mtime>}`; `409 {"error":"conflict","pcArtist":"…"}` when the file's mtime differs from
   `baseMtime` and the PC-side value differs. Send `"force":true` to overwrite.
