@@ -115,6 +115,10 @@ fun SheetHost(c: Ctx) {
         } else {
             Modifier.fillMaxWidth().heightIn(max = 760.dp).windowInsetsPadding(WindowInsets.navigationBars)
         }
+        // Tall sheets stop below the status bar (plus a gap), so the title and Done stay easy to reach.
+        Column(
+            Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = if (c.unfolded) 0.dp else 48.dp),
+        ) {
         Column(
             shape.background(C.Surface).imePadding()
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
@@ -134,6 +138,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit
             }
         }
+        }
     }
 }
 
@@ -146,7 +151,9 @@ private fun SheetHeader(title: String, sub: String? = null, action: String, onAc
         }
         extra()
         Spacer(Modifier.width(8.dp))
-        Mono(action, color = C.Fg, style = T.mono(11.sp, 600), modifier = Modifier.clickable(onClick = onAction).padding(4.dp))
+        Box(
+            Modifier.border(1.dp, C.HairStrong).clickable(onClick = onAction).padding(horizontal = 14.dp, vertical = 10.dp),
+        ) { Mono(action, color = C.Fg, style = T.mono(12.sp, 600)) }
     }
 }
 

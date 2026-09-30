@@ -45,11 +45,24 @@ class LocalMediaServer(private val context: Context) {
         }
     }
 
-    /** The phone's Wi-Fi IPv4 address, or null when not on a network. */
+    /**
+     * The phone's Wi-Fi IPv4 address, or null when not on a network. Not the active network's: with a VPN
+     * such as Tailscale on, that is the VPN's 100.x address, which speakers at home can't reach.
+     */
     private fun lanAddress(): String? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val lp = cm.getLinkProperties(cm.activeNetwork) ?: return null
-        return lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
+        @Suppress("DEPRECATION")
+        val nets = cm.allNetworks.filter { n ->
+            val caps = cm.getNetworkCapabilities(n) ?: return@filter false
+            !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) &&
+                (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+        } + listOfNotNull(cm.activeNetwork)
+        for (n in nets) {
+            val lp = cm.getLinkProperties(n) ?: continue
+            lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress && !it.hostAddress.orEmpty().startsWith("100.") }
+                ?.let { return it.hostAddress }
+        }
+        return null
     }
 
     /** Returns an http:// URL a speaker on the same network can fetch, or null when offline. */

@@ -350,6 +350,8 @@ class SonosOutput(
     private var poll: Job? = null
     private var sawPlaying = false
     private var expectedDuration = 0L
+    /** When the current song was handed to the speaker (0 = not waiting for it to start). */
+    private var loadedAt = 0L
 
     private fun run(block: suspend () -> Unit) = scope.launch {
         runCatching { block() }.onFailure { onError("${room.name} couldn't play this song (${it.message ?: "error"})") }
@@ -365,6 +367,7 @@ class SonosOutput(
         run {
             sonos.setUri(room, item)
             loaded = true
+            loadedAt = if (play) System.currentTimeMillis() else 0L
             if (startMs > 1000) runCatching { sonos.seek(room, startMs) }
             if (play) sonos.play(room)
             startPolling()
@@ -379,8 +382,16 @@ class SonosOutput(
                 val st = runCatching { sonos.transportState(room) }.getOrNull() ?: continue
                 val (pos, dur) = runCatching { sonos.position(room) }.getOrDefault(0L to 0L)
                 val playing = st == "PLAYING" || st == "TRANSITIONING"
-                if (playing) sawPlaying = true
+                // Only count real playback (TRANSITIONING also happens when the speaker fails to load the file).
+                if (st == "PLAYING" && pos > 0) sawPlaying = true
                 val d = if (dur > 0) dur else expectedDuration
+                if (st == "STOPPED" && !sawPlaying && loadedAt > 0 && System.currentTimeMillis() - loadedAt > 4_000) {
+                    // Stopped without ever playing: the speaker couldn't fetch the song. Stop here instead of skipping through the queue.
+                    loadedAt = 0
+                    _state.value = RemoteState(positionMs = 0, durationMs = d, playing = false, error = "${room.name} couldn't load this song")
+                    onError("${room.name} couldn't load this song · check that the phone and the speaker are on the same Wi-Fi")
+                    continue
+                }
                 val ended = sawPlaying && st == "STOPPED"
                 if (ended) sawPlaying = false
                 _state.value = RemoteState(positionMs = if (ended) d else pos, durationMs = d, playing = playing, ended = ended)

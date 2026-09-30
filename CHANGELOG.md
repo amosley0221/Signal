@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.21] - 2026-09-30
+
+### Sonos plays songs stored on the phone again
+- Fixed Sonos staying silent and skipping song after song when playing music stored on the phone while Tailscale is on. The phone gave the speaker its Tailscale address (100.x), which speakers at home can't reach. It now always gives the home Wi-Fi address.
+- If a speaker can't load a song, playback now stops with a message instead of skipping through the whole queue.
+
+### Easier to close sheets
+- Sheets like **Play on** now stop below the status bar with a gap at the top, and **Done** / **Cancel** are bigger buttons.
+
 ## [1.0.20] - 2026-09-30
 
 ### Sonos with Tailscale, take three
