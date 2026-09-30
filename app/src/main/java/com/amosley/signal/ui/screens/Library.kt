@@ -191,6 +191,20 @@ private fun LazyListScope.recent(c: Ctx) {
             }
         }
     }
+    if (!c.settings.phoneFoldersChosen && c.repo.phoneFolders.value.isNotEmpty()) item {
+        Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
+            CardBox {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Choose folders on this phone", style = T.rowSecondary)
+                        Spacer(Modifier.height(3.dp))
+                        Text("Pick which folders hold your music, music videos, movies and TV", style = T.meta, color = C.Muted)
+                    }
+                    OutlineBtn("Choose", color = C.AmberText, border = C.Amber) { c.st.push(Screen.PhoneFolders) }
+                }
+            }
+        }
+    }
     if (c.lib.tracks.isEmpty()) {
         item { EmptyLibrary(c) }
         return
@@ -358,11 +372,11 @@ fun MusicVideoCard(c: Ctx, v: MusicVideo) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp).clickable { c.st.push(Screen.Video(v.id, VideoKind.MUSIC_VIDEO)) }) {
         Art(v.title, if (v.hasArt) c.repo.artUrl(v.id, "thumb") else null, Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
             PlayDisc(modifier = Modifier.align(Alignment.Center))
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { DownloadChip(c, v.id) { c.repo.download(v) } }
+            if (v.origin == Origin.PC) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) { DownloadChip(c, v.id) { c.repo.download(v) } }
         }
         Spacer(Modifier.height(8.dp))
         Text(v.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Mono(listOfNotNull(v.resLabel, if (v.hdr) "HDR" else null, Fmt.dur(v.durationMs), if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "), style = T.metaMono, color = C.Faint)
+        Mono(listOfNotNull(v.resLabel, if (v.hdr) "HDR" else null, Fmt.dur(v.durationMs), if (v.origin == Origin.PHONE) "On this phone" else if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "), style = T.metaMono, color = C.Faint)
     }
 }
 
@@ -416,7 +430,7 @@ private fun LazyListScope.shows(c: Ctx) {
         val sh = list[i]
         Column(m.clickable { c.st.season = null; c.st.push(Screen.ShowPage(sh.id)) }) {
             Art(sh.title, sh.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
-                Box(Modifier.align(Alignment.TopEnd).padding(5.dp).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp, vertical = 1.dp)) {
+                if (!sh.id.startsWith("locs:")) Box(Modifier.align(Alignment.TopEnd).padding(5.dp).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp, vertical = 1.dp)) {
                     Text("PC", style = T.badge, color = C.Fg)
                 }
             }

@@ -5,6 +5,19 @@ The GitHub release notes for each APK come from the matching section below.
 
 ## [1.0.1] - 2026-09-30
 
+### Choose which phone folders to use
+- New **Phone folders** screen (Sync → This phone → Choose folders, or from the prompt in your library).
+  Set each folder to Music, Music Videos, Movies or TV Shows. Folders you leave Off stay hidden, so ringtones,
+  recordings and the phone's sample music no longer show up.
+- Choosing a folder includes the folders inside it.
+- Videos on the phone can now appear as music videos, movies or TV shows. TV episodes are grouped by show and season from names like "Show - S01E02 - Title".
+
+### Sonos and Chromecast
+- Songs and videos stored on the phone now play on Sonos and Chromecast. The app shares them with the speaker over your Wi-Fi.
+  Before this, Sonos showed "Play failed (500)" for songs that weren't on the PC.
+- Downloaded songs also play on speakers when the PC is off.
+- The "Pause failed" error no longer appears when switching speakers.
+
 ### Easier PC setup
 - The PC side is now a single download: get `SignalAgent.exe` from this release and double-click it. You don't need Node.js or a command line anymore.
 - Setup happens in your browser. Pick your music, music video, movie and TV folders with a folder browser, and optionally add Plex.

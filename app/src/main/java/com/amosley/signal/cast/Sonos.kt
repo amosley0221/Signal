@@ -186,8 +186,11 @@ class SonosOutput(
     private var expectedDuration = 0L
 
     private fun run(block: suspend () -> Unit) = scope.launch {
-        runCatching { block() }.onFailure { onError(it.message ?: "Sonos error") }
+        runCatching { block() }.onFailure { onError("${room.name} couldn't play this song (${it.message ?: "error"})") }
     }
+
+    /** True once a song has been handed to the speaker; Play/Pause before that make Sonos return 500. */
+    @Volatile private var loaded = false
 
     override fun load(item: RemoteItem, startMs: Long, play: Boolean) {
         expectedDuration = item.durationMs
@@ -195,6 +198,7 @@ class SonosOutput(
         _state.value = RemoteState(positionMs = startMs, durationMs = item.durationMs, playing = play)
         run {
             sonos.setUri(room, item)
+            loaded = true
             if (startMs > 1000) runCatching { sonos.seek(room, startMs) }
             if (play) sonos.play(room)
             startPolling()
@@ -218,12 +222,22 @@ class SonosOutput(
         }
     }
 
-    override fun play() { _state.value = _state.value.copy(playing = true); run { sonos.play(room) } }
-    override fun pause() { _state.value = _state.value.copy(playing = false); run { sonos.pause(room) } }
-    override fun seek(ms: Long) { run { sonos.seek(room, ms) } }
+    override fun play() {
+        if (!loaded) return
+        _state.value = _state.value.copy(playing = true)
+        run { sonos.play(room) }
+    }
+
+    override fun pause() {
+        if (!loaded) return
+        _state.value = _state.value.copy(playing = false)
+        scope.launch { runCatching { sonos.pause(room) } }
+    }
+
+    override fun seek(ms: Long) { if (loaded) run { sonos.seek(room, ms) } }
 
     override fun release() {
         poll?.cancel()
-        run { sonos.pause(room) }
+        if (loaded) scope.launch { runCatching { sonos.pause(room) } }
     }
 }

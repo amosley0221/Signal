@@ -41,6 +41,14 @@ data class Settings(
     val recentSearches: List<String> = emptyList(),
     /** PC tracks added after this time with no artist show up in Import review. */
     val importReviewedAt: Long = 0,
+    /** Phone folder → what it holds. Folders not in the map are hidden from the library. */
+    val phoneFolders: Map<String, PhoneFolderType> = emptyMap(),
+    /** False until the user has chosen phone folders (the library prompts them to). */
+    val phoneFoldersChosen: Boolean = false,
 )
+
+enum class PhoneFolderType(val label: String) {
+    MUSIC("Music"), MUSIC_VIDEOS("Music Videos"), MOVIES("Movies"), TV("TV Shows");
+}
 
 enum class LyricMode { ORIG, BOTH, TRANS }

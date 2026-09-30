@@ -306,15 +306,37 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     }
 
     /** URL a speaker/TV can fetch itself: always the PC endpoint (phone-only songs can't be cast). */
+    /** Serves phone files to speakers/TVs on the Wi-Fi. */
+    val localServer = LocalMediaServer(context)
+
+    private fun mimeOf(container: String?): String = when (container?.uppercase()) {
+        "FLAC" -> "audio/flac"; "WAV" -> "audio/wav"; "MP3" -> "audio/mpeg"; "M4A", "AAC", "ALAC" -> "audio/mp4"
+        "OGG", "OPUS" -> "audio/ogg"; "AIFF" -> "audio/aiff"
+        else -> "audio/mpeg"
+    }
+
+    /**
+     * A URL a speaker or TV can fetch itself: the PC's stream for PC songs (transcoded to 16/44 FLAC for
+     * Sonos when the file is hi-res), otherwise the phone's built-in server for phone songs and downloads.
+     */
     fun remoteItemFor(t: Track, forSonos: Boolean): RemoteItem? {
-        if (t.origin != Origin.PC) return null
-        val needsTranscode = forSonos && ((t.sampleRate ?: 0) > 48000 || (t.bitDepth ?: 0) > 24 || t.container == "WAV" && (t.bitDepth ?: 16) > 16)
-        val url = (if (needsTranscode) repo.transcodedUrl(t.id) else repo.streamUrl(t.id)) ?: return null
-        val mime = when (if (needsTranscode) "FLAC" else t.container?.uppercase()) {
-            "FLAC" -> "audio/flac"; "WAV" -> "audio/wav"; "MP3" -> "audio/mpeg"; "M4A", "AAC" -> "audio/mp4"; "OGG", "OPUS" -> "audio/ogg"
-            else -> "audio/*"
+        val hiRes = (t.sampleRate ?: 0) > 48000 || (t.bitDepth ?: 0) > 24
+        val pcUp = t.origin == Origin.PC && repo.status.value.reachable && !repo.settings.value.offline
+        if (pcUp) {
+            val transcode = forSonos && hiRes
+            val url = (if (transcode) repo.transcodedUrl(t.id) else repo.streamUrl(t.id)) ?: return null
+            return RemoteItem(url, t.title, t.artist, t.album, if (t.hasArt) repo.artUrl(t.id) else null, if (transcode) "audio/flac" else mimeOf(t.container), t.durationMs)
         }
-        return RemoteItem(url, t.title, t.artist, t.album, repo.artUrl(t.id), mime, t.durationMs)
+        val file = repo.downloads.fileFor(t.id)
+        val uri = when {
+            file != null -> Uri.fromFile(file)
+            t.origin == Origin.PHONE -> Uri.parse(t.uri)
+            else -> return null
+        }
+        val mime = if (file != null && file.extension.equals("flac", true)) "audio/flac" else mimeOf(t.container)
+        val url = localServer.urlFor(t.id, uri, mime) ?: return null
+        if (forSonos && hiRes) onToast("${t.title} is hi-res; Sonos may not play files above 48 kHz from the phone")
+        return RemoteItem(url, t.title, t.artist, t.album, null, mime, t.durationMs)
     }
 
     private fun sendCurrentToRemote(play: Boolean, startMs: Long) {
@@ -322,7 +344,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         val t = exo.currentMediaItem?.mediaId?.let { tracks[it] } ?: return
         val ri = remoteItemFor(t, r.kind == OutputKind.SONOS)
         if (ri == null) {
-            onToast("Only songs on ${repo.pcName} can play on ${r.name}")
+            onToast("Connect to Wi-Fi to play on ${r.name}")
             return
         }
         r.load(ri, startMs, play)

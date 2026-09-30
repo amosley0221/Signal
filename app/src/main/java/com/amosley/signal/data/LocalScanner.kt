@@ -23,6 +23,7 @@ class LocalScanner(private val context: Context) {
             MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.DATE_MODIFIED,
             MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DISPLAY_NAME,
         )
+        if (Build.VERSION.SDK_INT >= 29) cols += MediaStore.MediaColumns.RELATIVE_PATH
         if (Build.VERSION.SDK_INT >= 30) cols += listOf(MediaStore.Audio.Media.ALBUM_ARTIST, MediaStore.Audio.Media.GENRE, MediaStore.Audio.Media.DISC_NUMBER)
         val out = mutableListOf<Track>()
         val cursor = runCatching {
@@ -72,6 +73,7 @@ class LocalScanner(private val context: Context) {
                     hasArt = true,
                     uri = itemUri.toString(),
                     path = path,
+                    folder = folderOf(path, if (Build.VERSION.SDK_INT >= 29) str(MediaStore.MediaColumns.RELATIVE_PATH) else null),
                 )
             }
         }
@@ -84,7 +86,8 @@ class LocalScanner(private val context: Context) {
             MediaStore.Video.Media._ID, MediaStore.Video.Media.TITLE, MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.WIDTH, MediaStore.Video.Media.HEIGHT, MediaStore.Video.Media.SIZE,
             MediaStore.Video.Media.DATE_ADDED, MediaStore.Video.Media.DISPLAY_NAME,
-        )
+            MediaStore.Video.Media.DATA,
+        ) + (if (Build.VERSION.SDK_INT >= 29) arrayOf(MediaStore.MediaColumns.RELATIVE_PATH) else emptyArray())
         val out = mutableListOf<Movie>()
         val cursor = runCatching { context.contentResolver.query(uri, cols, null, null, null) }.getOrNull() ?: return out
         cursor.use { c ->
@@ -103,10 +106,18 @@ class LocalScanner(private val context: Context) {
                     container = name.substringAfterLast('.', "").uppercase().ifEmpty { null },
                     matchedBy = "ON THIS PHONE",
                     uri = ContentUris.withAppendedId(uri, id).toString(),
+                    folder = folderOf(c.getString(8), if (c.columnCount > 9) c.getString(9) else null),
                 )
             }
         }
         return out
+    }
+
+    /** "Music/Suno" style folder relative to shared storage. */
+    private fun folderOf(path: String?, relative: String?): String {
+        relative?.trimEnd('/')?.takeIf { it.isNotEmpty() }?.let { return it }
+        val dir = path?.substringBeforeLast('/', "") ?: return "Unknown"
+        return dir.replace(Regex("^/storage/emulated/\\d+/"), "").replace(Regex("^/storage/"), "").ifEmpty { "Unknown" }
     }
 
     private val formatCache = HashMap<String, Pair<Int?, Int?>>()

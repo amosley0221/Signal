@@ -49,6 +49,8 @@ data class Track(
     val uri: String = "",
     /** Absolute file path for phone tracks when known (used to find .lrc sidecars). */
     val path: String? = null,
+    /** Folder on the phone (phone tracks only), used by the folder picker. */
+    val folder: String? = null,
     val libraryId: String? = null,
 ) {
     val quality: Quality get() = Quality.of(container, codec, bitDepth, sampleRate)
@@ -88,6 +90,9 @@ data class MusicVideo(
     val addedAt: Long = 0,
     val hasArt: Boolean = false,
     val libraryId: String? = null,
+    val origin: Origin = Origin.PC,
+    /** content:// uri for phone videos. */
+    val uri: String = "",
 ) {
     val resLabel: String get() = resolutionLabel(width, height)
 }
@@ -134,6 +139,8 @@ data class Movie(
     /** content:// uri for phone videos. */
     val uri: String = "",
     val libraryId: String? = null,
+    /** Folder on the phone (phone videos only), used by the folder picker. */
+    val folder: String? = null,
 )
 
 @Serializable
@@ -153,6 +160,8 @@ data class Episode(
     val thumbUrl: String? = null,
     val subtitles: List<Subtitle> = emptyList(),
     val chapters: List<Chapter> = emptyList(),
+    /** content:// uri for episodes stored on the phone. */
+    val uri: String = "",
 )
 
 @Serializable

@@ -147,16 +147,17 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         val enabledLibs = s.libModes.keys
         fun libOk(id: String?) = id == null || enabledLibs.isEmpty() || id in enabledLibs
         fun avail(id: String, origin: Origin) = !s.offline || origin == Origin.PHONE || (id in dlKeys && downloads.isDownloaded(id))
+        val phone = PhoneLibrary.split(localTracks, localVideos, s.phoneFolders)
         val remoteTracks = cat.tracks.filter { libOk(it.libraryId) }.map { it.copy(origin = Origin.PC, uri = it.id) }
-        val tracks = (remoteTracks + localTracks)
+        val tracks = (remoteTracks + phone.tracks)
             .map { t -> overrides[t.id]?.let { t.copy(artist = it) } ?: t }
             .filter { avail(it.id, it.origin) }
-        val videos = cat.videos.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) }
-        val movies = cat.movies.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + localVideos
+        val videos = cat.videos.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.musicVideos
+        val movies = cat.movies.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.movies
         val shows = cat.shows.filter { libOk(it.libraryId) }.mapNotNull { show ->
             if (!s.offline) show else show.copy(seasons = show.seasons.map { se -> se.copy(episodes = se.episodes.filter { downloads.isDownloaded(it.id) }) }.filter { it.episodes.isNotEmpty() })
                 .takeIf { it.seasons.isNotEmpty() }
-        }
+        } + phone.shows
         val artists = tracks.mapNotNull { it.artist }.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
         return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists)
     }
@@ -167,6 +168,16 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     // ---- Phone library --------------------------------------------------------------------------
+
+    /** Every phone folder that holds music or video, for the folder picker. */
+    val phoneFolders: StateFlow<List<PhoneFolder>> = combine(_localTracks, _localVideos) { t, v -> PhoneLibrary.folders(t, v) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    fun setPhoneFolder(path: String, type: PhoneFolderType?) {
+        updateSettings { s ->
+            s.copy(phoneFolders = if (type == null) s.phoneFolders - path else s.phoneFolders + (path to type), phoneFoldersChosen = true)
+        }
+    }
 
     fun rescanPhone() {
         scope.launch(Dispatchers.IO) {
@@ -447,7 +458,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         val b = _status.value.baseUrl ?: return
         val musicLib = _libraries.value.firstOrNull { it.type == "music" } ?: return
         val onPc = cat.tracks.map { "${it.title.lowercase()}|${it.artist?.lowercase()}" }.toSet()
-        val todo = _localTracks.value.filter { it.id !in meta.uploaded && "${it.title.lowercase()}|${it.artist?.lowercase()}" !in onPc }
+        val todo = _localTracks.value.filter { PhoneLibrary.typeOf(it.folder, _settings.value.phoneFolders) == PhoneFolderType.MUSIC && it.id !in meta.uploaded && "${it.title.lowercase()}|${it.artist?.lowercase()}" !in onPc }
         for (t in todo) {
             _uploads.update { it + (t.id to "RUNNING") }
             val name = (t.path?.substringAfterLast('/') ?: "${t.title}.${t.container?.lowercase() ?: "bin"}")

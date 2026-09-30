@@ -229,10 +229,12 @@ fun ShowScreen(c: Ctx, id: String) {
                             c.st.push(Screen.Video(next.id, VideoKind.EPISODE, show.id))
                         }
                     }
+                    if (!show.id.startsWith("locs:")) {
                     Spacer(Modifier.width(10.dp))
                     SquareBtn(Icons.Filled.Download, size = 40.dp, desc = "Download season") {
                         season?.episodes?.forEach { c.repo.download(it, show) }
                         c.toast("Downloading season $seasonNo")
+                    }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -278,7 +280,7 @@ private fun EpisodeRow(c: Ctx, show: Show, ep: Episode) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Mono("E${ep.episode} · ${Fmt.runtime(ep.durationMs)}", style = T.metaMono, color = C.Faint, modifier = Modifier.weight(1f))
                 if (ep.watched) Icon(Icons.Filled.Check, "Watched", tint = C.Green, modifier = Modifier.size(14.dp))
-                DlButton(c, ep.id, Origin.PC, 28) { c.repo.download(ep, show) }
+                DlButton(c, ep.id, if (ep.uri.isNotEmpty()) Origin.PHONE else Origin.PC, 28) { c.repo.download(ep, show) }
             }
             Text(ep.title, style = T.ui(14.5.sp, 600), maxLines = 1, overflow = TextOverflow.Ellipsis)
             ep.summary?.let { Text(it, style = T.ui(12.5.sp), color = C.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
@@ -317,12 +319,14 @@ private fun resolve(c: Ctx, s: Screen.Video): VideoSource? {
             val i = eps.indexOfFirst { it.id == s.id }
             val ep = eps.getOrNull(i) ?: return null
             val nxt = eps.getOrNull(i + 1)?.let { Screen.Video(it.id, VideoKind.EPISODE, show!!.id) }
-            VideoSource(ep.id, "${show!!.title} · S${ep.season}E${ep.episode} ${ep.title}", Fmt.runtime(ep.durationMs), uri(ep.id, Origin.PC, ""),
-                c.repo.streamUrl(ep.id), if (ep.watched) 0 else ep.viewOffsetMs, ep.durationMs, ep.subtitles, ep.chapters, ep.width, ep.height, Origin.PC, nxt)
+            val epOrigin = if (ep.uri.isNotEmpty()) Origin.PHONE else Origin.PC
+            VideoSource(ep.id, "${show!!.title} · S${ep.season}E${ep.episode} ${ep.title}", Fmt.runtime(ep.durationMs), uri(ep.id, epOrigin, ep.uri),
+                if (epOrigin == Origin.PC) c.repo.streamUrl(ep.id) else null, if (ep.watched) 0 else ep.viewOffsetMs, ep.durationMs, ep.subtitles, ep.chapters, ep.width, ep.height, epOrigin, nxt)
         }
         VideoKind.MUSIC_VIDEO -> c.lib.videos.firstOrNull { it.id == s.id }?.let { v ->
-            VideoSource(v.id, v.title, listOfNotNull(v.artist, v.album).joinToString(" · "), uri(v.id, Origin.PC, ""), c.repo.streamUrl(v.id), 0, v.durationMs,
-                emptyList(), emptyList(), v.width, v.height, Origin.PC, null)
+            VideoSource(v.id, v.title, listOfNotNull(v.artist, v.album).joinToString(" · "), uri(v.id, v.origin, v.uri),
+                if (v.origin == Origin.PC) c.repo.streamUrl(v.id) else null, 0, v.durationMs,
+                emptyList(), emptyList(), v.width, v.height, v.origin, null)
         }
     }
 }
@@ -384,7 +388,8 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
             }
         }
         player.addListener(listener)
-        app.currentVideoItem = src.remoteUrl?.let { RemoteItem(it, src.title, null, null, null, "video/mp4", src.durationMs, isVideo = true) }
+        val castUrl = src.remoteUrl ?: app.hub.localServer.urlFor(src.id, src.uri, "video/mp4")
+        app.currentVideoItem = castUrl?.let { RemoteItem(it, src.title, null, null, null, "video/mp4", src.durationMs, isVideo = true) }
         app.videoPosition = { player.currentPosition }
         onDispose {
             if (src.origin == Origin.PC) app.repo.reportProgress(src.id, player.currentPosition, player.duration.coerceAtLeast(dur))

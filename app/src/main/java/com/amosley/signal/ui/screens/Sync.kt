@@ -271,9 +271,12 @@ fun SyncScreen(c: Ctx) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Music & videos on this phone", style = T.row)
-                    Text("${c.lib.tracks.count { it.origin == com.amosley.signal.core.Origin.PHONE }} songs found", style = T.ui(12.5.sp), color = C.Muted)
+                    Text(
+                        if (s.phoneFolders.isEmpty()) "No folders chosen yet" else "${s.phoneFolders.size} folder${if (s.phoneFolders.size != 1) "s" else ""} · ${c.lib.tracks.count { it.origin == com.amosley.signal.core.Origin.PHONE }} songs",
+                        style = T.ui(12.5.sp), color = C.Muted,
+                    )
                 }
-                OutlineBtn("Rescan") { repo.rescanPhone(); c.toast("Scanning this phone") }
+                OutlineBtn("Choose folders") { c.st.push(Screen.PhoneFolders) }
             }
         }
         Spacer(Modifier.height(20.dp))

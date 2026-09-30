@@ -29,6 +29,7 @@ sealed interface Screen {
     data object Activity : Screen
     data object Pair : Screen
     data object Search : Screen
+    data object PhoneFolders : Screen
 
     companion object {
         const val NEEDS_ARTIST = "smart:needs-artist"
