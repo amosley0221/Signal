@@ -11,6 +11,7 @@ import { mimeFor, hasExecutable } from './util.js';
 import { isLosslessCodec } from './media.js';
 import { adminPage } from './admin.js';
 import { validateSetup, saveSetup } from './config.js';
+import { Plex } from './plex.js';
 import { listFolders } from './desktop.js';
 
 const MAX_JSON = 1024 * 1024;
@@ -203,6 +204,15 @@ export function createServer(agent) {
     sendJson(req, res, 200, l);
   });
 
+  route('GET', '/api/update', (req, res) => {
+    const { current, latest, available, notes, downloading, error } = agent.updater.state();
+    sendJson(req, res, 200, { current, latest, available, notes, downloading, error });
+  });
+  route('POST', '/api/update', async (req, res) => {
+    const r = await agent.updater.install();
+    sendJson(req, res, r.ok ? 200 : 409, r);
+  });
+
   route('POST', '/api/lyrics/:id', async (req, res, p) => {
     const body = await readJson(req);
     if (typeof body.lrc !== 'string' || !body.lrc.trim()) return sendJson(req, res, 400, { error: 'bad_request' });
@@ -294,7 +304,8 @@ export function createServer(agent) {
       return sendJson(req, res, 500, { error: 'write_failed', errors: [{ field: 'config', message: `Could not save ${agent.config.configPath}: ${e.message}` }] });
     }
     agent.reconfigure(cfg).catch(() => {});
-    sendJson(req, res, 200, { ok: true, setup: { ...agent.setupState(), name: cfg.name, libraries: v.setup.libraries, plex: v.setup.plex } });
+    const plex = v.setup.plex.url && v.setup.plex.token ? await Plex.test(v.setup.plex) : null;
+    sendJson(req, res, 200, { ok: true, plex, setup: { ...agent.setupState(), name: cfg.name, libraries: v.setup.libraries, plex: v.setup.plex } });
   });
   // Folder picker for the setup page. Also needs the X-Signal-Admin header (so other web pages can't use it).
   admin('GET', '/admin/browse', async (req, res, p, q) => {
@@ -311,6 +322,15 @@ export function createServer(agent) {
   admin('GET', '/admin/tray-state', (req, res) => {
     if (req.headers['x-signal-admin'] !== '1') return sendJson(req, res, 403, { error: 'forbidden' });
     sendJson(req, res, 200, agent.trayState());
+  });
+  // Self-update: setup page / tray (admin) and the phone app (token).
+  admin('GET', '/admin/update', (req, res) => {
+    if (req.headers['x-signal-admin'] !== '1') return sendJson(req, res, 403, { error: 'forbidden' });
+    sendJson(req, res, 200, agent.updater.state());
+  });
+  admin('POST', '/admin/update', async (req, res) => {
+    const r = await agent.updater.install();
+    sendJson(req, res, r.ok ? 200 : 409, r);
   });
   admin('POST', '/admin/quit', (req, res) => {
     res.once('finish', () => setImmediate(() => { agent.quit().catch((e) => agent.log(`[agent] quit failed: ${e.stack || e}`)); }));

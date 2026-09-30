@@ -12,19 +12,30 @@ No installing Node.js, no command line, no settings files.
      **Run anyway**. This appears because the program isn't signed with a paid certificate.
    - When **Windows Firewall** asks whether to allow Signal Agent, tick **Private networks** and click
      **Allow**. Without this your phone can't reach the PC.
-3. **The setup page opens in your browser** (<http://localhost:8765/>). Click **+ Add a folder**, pick
-   your music or video folder, choose what's in it (Music, Music videos, Movies or TV shows), add any
-   other folders, then click **Save**. The agent starts scanning straight away.
-4. **Turn on "Start with Windows"** on the same page, so the agent runs in the background every time
-   you sign in. Otherwise keep the black Signal Agent window open while you use the app.
-5. **Pair your phone.** In Signal Player, open *Sync → Pair with a PC*. The PC is usually found by
-   itself; if not, type one of the addresses shown on the setup page under *Connect your phone*.
-   Your phone shows a 6-digit code, and the same code appears on the setup page: click **Approve**.
+3. **A Signal icon appears in the system tray** (bottom-right, next to the clock). There's no window to keep open.
+   If you don't see it, click the **^** arrow by the clock and drag the Signal icon out onto the taskbar so it
+   stays visible. Right-click the icon for **Open Signal Agent**, **Start with Windows**, **Update** (when one is
+   available) and **Quit**. Double-clicking the icon opens the setup page.
+4. **The first time, the setup page opens in your browser** (<http://localhost:8765/>). Click **+ Add a folder**,
+   pick your music or video folder, choose what's in it (Music, Music videos, Movies or TV shows), add any other
+   folders, then click **Save**. The agent starts scanning straight away. You can close the browser tab when you're
+   done; the agent keeps running in the tray.
+   - **Plex (optional):** paste your Plex token. If Plex runs on this PC, leave the address empty and
+     `http://127.0.0.1:32400` is used. After saving, the page tells you whether Plex connected.
+5. **Turn on "Start with Windows"** (on the setup page, or from the tray icon), so the agent starts quietly every
+   time you sign in.
+6. **Pair your phone.** In Signal Player, open *Settings → PC sync → Pair*. The PC is usually found by itself; if
+   not, type one of the addresses shown on the setup page under *Connect your phone*. Your phone shows a 6-digit
+   code. The tray icon pops up a notice, and the same code appears on the setup page: click **Approve**.
 
-To open the setup page again later, double-click `SignalAgent.exe` again (if it's already running, it
-just opens the page), or go to <http://localhost:8765/> on the PC. Settings and data are stored in
-`%APPDATA%\SignalAgent\` (`signal-agent.config.json` and `data\`). To update, download the new
-`SignalAgent.exe` and replace the old one (turn *Start with Windows* off and on again if you moved it).
+**Updates install themselves.** The agent checks for a new version when it starts and every 6 hours. When there is
+one, the tray icon shows a notice: click it (or tray → **Update to x.y.z**, or the banner on the setup page, or
+*Settings → PC sync → Update* in the phone app). The new `SignalAgent.exe` is checked against its published
+SHA-256 fingerprint before it replaces the old one, then the agent restarts by itself within a few seconds. Your
+settings and paired phones are kept.
+
+Settings and data are stored in `%APPDATA%\SignalAgent\` (`signal-agent.config.json` and `data\`). The log is
+`%APPDATA%\SignalAgent\data\agent.log`. To stop the agent, right-click the tray icon → **Quit**.
 
 ---
 

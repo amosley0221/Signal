@@ -111,3 +111,15 @@ test('progress is forwarded to Plex', async () => {
   const after = await (await api('/api/catalog')).json();
   assert.equal(after.movies[0].watched, true);
 });
+
+test('Plex.test reports connected / bad token / unreachable in plain words', async () => {
+  const { Plex } = await import('../src/plex.js');
+  const url = `http://127.0.0.1:${plexSrv.address().port}`;
+  assert.deepEqual(await Plex.test({ url, token: 'tok' }), { ok: true, libraries: 2 });
+  const bad = await Plex.test({ url, token: 'nope' });
+  assert.equal(bad.ok, false);
+  assert.match(bad.message, /rejected the token/);
+  const down = await Plex.test({ url: 'http://127.0.0.1:9', token: 'tok' }, { timeoutMs: 1500 });
+  assert.equal(down.ok, false);
+  assert.match(down.message, /didn't answer/);
+});

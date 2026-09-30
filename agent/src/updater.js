@@ -271,6 +271,8 @@ export class Updater {
   async #install(rel) {
     const { log } = this.opts;
     let expectedSha = null;
+    // Never install an unverified program.
+    if (!rel.shaUrl) throw new Error('this release has no SignalAgent.exe.sha256 checksum, so it was not installed');
     if (rel.shaUrl) {
       const r = await this.opts.fetchFn(rel.shaUrl, { headers: { 'User-Agent': USER_AGENT }, redirect: 'follow', signal: AbortSignal.timeout(30000) });
       if (!r.ok) throw new Error(`could not download the checksum (${r.status})`);

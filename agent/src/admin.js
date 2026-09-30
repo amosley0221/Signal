@@ -62,6 +62,12 @@ export function adminPage() {
   <div class="row"><div class="grow"><h1 id="name">Signal Agent</h1><div class="sub" id="meta">…</div></div>
   <button id="rescan">Rescan libraries</button></div>
 
+  <div id="updateBox" class="card block welcome" hidden>
+    <h3 style="margin-top:0" id="updateTitle">Update available</h3>
+    <p class="muted" id="updateNotes" style="white-space:pre-wrap;max-height:200px;overflow:auto"></p>
+    <button id="updateBtn">Update now</button> <span id="updateMsg" class="msg"></span>
+  </div>
+
   <div id="welcome" class="card block welcome" hidden>
     <h3 style="margin-top:0">Welcome! Let's set up Signal Agent.</h3>
     <p>This program lets the Signal app on your phone play the music and videos stored on this PC.</p>
@@ -89,6 +95,7 @@ export function adminPage() {
       <p class="muted">If you use Plex Media Server, Signal can show Plex's movie and TV details and keep watched status in sync. Leave empty if you don't use Plex.</p>
       <label class="field" for="plexUrl">Plex address</label>
       <input type="text" id="plexUrl" placeholder="http://127.0.0.1:32400" style="width:100%;max-width:360px">
+      <p class="muted">Plex on this PC: <code>http://127.0.0.1:32400</code> (used automatically if you leave this empty) · Plex on another PC: <code>http://&lt;its IP&gt;:32400</code></p>
       <label class="field" for="plexToken">Plex token</label>
       <input type="password" id="plexToken" autocomplete="off" style="width:100%;max-width:360px">
       <p class="muted">To find your token: open Plex in a web browser, open any movie, click ⋯ → <b>Get Info</b> → <b>View XML</b>. The address of the page that opens ends with <code>X-Plex-Token=…</code> — copy the part after the <code>=</code>.</p>
@@ -200,7 +207,10 @@ $('save').onclick = async () => {
     rows = r.setup.libraries.map((l) => ({ ...l }));
     renderRows();
     $('saveMsg').className = 'msg ok';
-    $('saveMsg').textContent = 'Saved. Scanning your folders now — watch the Activity list below. Next: pair your phone (Signal Player → Sync → Pair with a PC).';
+    $('saveMsg').textContent = 'Saved. Scanning your folders now — watch the Activity list below. Next: pair your phone (Signal Player → Settings → PC sync → Pair).'
+      + (r.plex ? (r.plex.ok ? ' Connected to Plex · ' + r.plex.libraries + ' libraries.' : ' Plex: ' + r.plex.message) : '');
+    if (r.plex && !r.plex.ok) { $('saveMsg').className = 'msg bad'; $('plexBox').open = true; }
+    if (r.setup?.plex) { $('plexUrl').value = r.setup.plex.url || ''; }
   } else {
     const errs = r.errors || [];
     renderRows(errs);
@@ -278,6 +288,25 @@ async function refresh() {
 }
 loadSetup().then(() => { if (!rows.length) { $('setupTitle').scrollIntoView(); $('addLib').focus(); } });
 refresh();
+async function refreshUpdate() {
+  try {
+    const u = await (await fetch('/admin/update', { headers: { 'X-Signal-Admin': '1' } })).json();
+    $('updateBox').hidden = !u.available && !u.downloading;
+    if (!$('updateBox').hidden) {
+      $('updateTitle').textContent = 'Signal Agent ' + u.latest + ' is available (you have ' + u.current + ')';
+      $('updateNotes').textContent = u.notes || '';
+      $('updateBtn').disabled = !!u.downloading;
+      $('updateMsg').textContent = u.downloading ? 'Downloading… ' + Math.round((u.progress || 0) * 100) + '% — Signal Agent restarts by itself when done.' : (u.error ? 'Update failed: ' + u.error : '');
+    }
+  } catch { /* agent restarting */ }
+}
+$('updateBtn').onclick = async () => {
+  $('updateBtn').disabled = true;
+  const r = await post('/admin/update', {});
+  $('updateMsg').textContent = r.ok ? 'Downloading… Signal Agent restarts by itself when done.' : 'Could not start the update: ' + (r.reason || r.error);
+};
+refreshUpdate();
+setInterval(refreshUpdate, 5000);
 setInterval(refresh, 2000);
 </script>
 </body>

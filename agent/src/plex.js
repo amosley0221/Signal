@@ -52,6 +52,22 @@ export class Plex {
     return json ? res.json() : res;
   }
 
+/**
+   * Check an address + token: {ok:true, libraries:n} or {ok:false, message} in plain words.
+   */
+  static async test({ url, token }, { timeoutMs = 4000 } = {}) {
+    const plex = new Plex({ url, token });
+    try {
+      const j = await plex.get('/library/sections', {}, { timeoutMs });
+      return { ok: true, libraries: (j.MediaContainer?.Directory || []).length };
+    } catch (e) {
+      const m = /HTTP (\d+)/.exec(e.message);
+      if (m && (m[1] === '401' || m[1] === '403')) return { ok: false, message: 'Plex rejected the token. Copy it again from Plex (Get Info → View XML).' };
+      if (m) return { ok: false, message: `Plex answered with an error (HTTP ${m[1]}) at ${plex.url}.` };
+      return { ok: false, message: `Plex didn't answer at ${plex.url}. Is Plex Media Server running, and is the address right?` };
+    }
+  }
+
   /** Library sections with their folder paths. */
   async getSections() {
     const j = await this.get('/library/sections');

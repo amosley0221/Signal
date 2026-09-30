@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig, resolveConfigPath, normalizeConfig, isPackaged } from './config.js';
 import { Agent, VERSION } from './agent.js';
 import { openBrowser, showMessageBox, shouldOpenBrowser } from './desktop.js';
+import { startTray } from './tray.js';
 import { logFileFor, redirectConsole } from './logfile.js';
 
 export { Agent, VERSION, loadConfig, normalizeConfig };
@@ -140,6 +141,10 @@ export async function main(argv = process.argv.slice(2)) {
     redirectConsole(logFileFor(path.join(config.dataDir, 'agent.log')));
   }
 
+  // Just installed by the self-updater: the old copy is shutting down, so wait for the port.
+  if (argv.includes('--updated')) {
+    for (let i = 0; i < 60 && (await probeExisting(config.port)); i++) await new Promise((r) => setTimeout(r, 500));
+  }
   // Another copy already running? Point the browser at it instead of starting a second one.
   const existing = await probeExisting(config.port);
   if (existing) {
@@ -166,6 +171,10 @@ export async function main(argv = process.argv.slice(2)) {
     return fatal(`Could not start: ${e.message}`);
   }
   banner(agent.port, !config.libraries.length, windowless);
+  // Tray icon by the clock (Windows): Open / Start with Windows / Update / Quit.
+  if (!argv.includes('--no-tray')) {
+    startTray({ dataDir: config.dataDir, port: agent.port, name: config.name, log: agent.log });
+  }
   if (shouldOpenBrowser({ argv, packaged, needsSetup: !config.libraries.length, firstRun })) openBrowser(`http://localhost:${agent.port}/`);
   let rl = null;
   if (process.stdin.isTTY) {

@@ -3,6 +3,29 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.5] - 2026-09-30
+
+### Signal Agent on the PC runs quietly in the tray
+- No more black terminal window. Signal Agent now lives as a small **icon in the system tray** by the clock, like Plex.
+  - Right-click it for **Open Signal Agent**, **Start with Windows**, **Update** and **Quit**.
+  - Double-click it to open the setup page.
+- The browser only opens by itself the first time, for setup. After that you can close the tab; the agent keeps running.
+- A tray notice pops up when a phone asks to pair. Click it to approve.
+- Messages are written to a log file (`%APPDATA%\SignalAgent\data\agent.log`) instead of a window.
+
+### The PC agent updates itself
+- When a new version is out, the tray shows a notice. Click it to install.
+  You can also use the banner on the setup page, or **Settings → PC sync → Update** in the phone app.
+- Each download is checked against its published fingerprint (SHA-256) before it replaces the old program.
+  The agent restarts by itself in a few seconds, and your settings and paired phones stay.
+- **One last manual step:** download this version's `SignalAgent.exe` once and replace your current one.
+  Every update after that installs itself.
+
+### Plex setup
+- If you paste a Plex token and leave the address empty, `http://127.0.0.1:32400` (Plex on the same PC) is used automatically.
+- After saving, the setup page says whether Plex connected ("Connected to Plex · 4 libraries") or what went wrong
+  (wrong token, or Plex not answering).
+
 ## [1.0.4] - 2026-09-30
 
 ### Sorting

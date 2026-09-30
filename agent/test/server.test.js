@@ -212,3 +212,18 @@ test('admin page is served to localhost', async () => {
   assert.equal(denied.status, 403);
   await denied.arrayBuffer();
 });
+
+test('update endpoints: phone needs a token, admin needs localhost + header', async () => {
+  const anon = await fetch(`${base}/api/update`);
+  assert.equal(anon.status, 401);
+  await anon.text();
+  const u = await (await api('/api/update')).json();
+  assert.equal(u.available, false); // running from source never self-updates
+  assert.deepEqual(Object.keys(u).sort(), ['available', 'current', 'downloading', 'error', 'latest', 'notes']);
+  const noHeader = await fetch(`${base}/admin/update`);
+  assert.equal(noHeader.status, 403);
+  await noHeader.text();
+  const install = await api('/api/update', { method: 'POST', body: '{}' });
+  assert.equal(install.status, 409);
+  await install.json();
+});

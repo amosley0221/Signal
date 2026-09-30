@@ -18,7 +18,8 @@ $script:Base = 'http://127.0.0.1:' + $Port
 $script:PageUrl = 'http://localhost:' + $Port + '/'
 $script:Headers = @{ 'X-Signal-Admin' = '1' }
 $script:Seen = @{}
-$script:BalloonOpensPage = $false
+$script:BalloonAction = ''
+$script:UpdateSeen = ''
 $script:Quitting = $false
 
 function Get-TrayState {
@@ -34,6 +35,16 @@ function Invoke-AgentPost([string]$Path, [string]$Body) {
     return Invoke-RestMethod -Method Post -Uri ($script:Base + $Path) -Headers $script:Headers -ContentType 'application/json' -Body $Body -TimeoutSec 3 -UseBasicParsing
   } catch {
     return $null
+  }
+}
+
+function Start-Update {
+  $r = Invoke-AgentPost '/admin/update' '{}'
+  $script:BalloonAction = ''
+  if ($r -ne $null -and [bool]$r.ok) {
+    $script:Notify.ShowBalloonTip(6000, 'Signal Agent', 'Updating ' + [char]0x2014 + ' Signal Agent will restart in a moment', [System.Windows.Forms.ToolTipIcon]::Info)
+  } else {
+    $script:Notify.ShowBalloonTip(6000, 'Signal Agent', 'The update could not start. Open Signal Agent for details.', [System.Windows.Forms.ToolTipIcon]::Warning)
   }
 }
 
@@ -87,6 +98,10 @@ $startItem.add_Click({
   if ($r -ne $null) { $script:StartItem.Checked = [bool]$r.enabled }
 })
 $script:StartItem = $startItem
+$updateItem = New-Object System.Windows.Forms.ToolStripMenuItem 'Update Signal Agent'
+$updateItem.Visible = $false
+$updateItem.add_Click({ Start-Update })
+$script:UpdateItem = $updateItem
 $quitItem = New-Object System.Windows.Forms.ToolStripMenuItem 'Quit Signal Agent'
 $quitItem.add_Click({
   $script:Quitting = $true
@@ -95,6 +110,7 @@ $quitItem.add_Click({
 })
 [void]$menu.Items.Add($openItem)
 [void]$menu.Items.Add($startItem)
+[void]$menu.Items.Add($updateItem)
 [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 [void]$menu.Items.Add($quitItem)
 $menu.add_Opening({
@@ -102,17 +118,26 @@ $menu.add_Opening({
   if ($s -ne $null) {
     $script:StartItem.Visible = [bool]$s.startupSupported
     $script:StartItem.Checked = [bool]$s.startup
+    $u = $s.update
+    $script:UpdateItem.Visible = ($u -ne $null -and [bool]$u.available)
+    if ($script:UpdateItem.Visible) {
+      if ([bool]$u.downloading) { $script:UpdateItem.Text = 'Updating...'; $script:UpdateItem.Enabled = $false }
+      else { $script:UpdateItem.Text = 'Update to ' + [string]$u.latest; $script:UpdateItem.Enabled = $true }
+    }
   }
 })
 $script:Notify.ContextMenuStrip = $menu
 $script:Notify.add_DoubleClick({ Open-Page })
-$script:Notify.add_BalloonTipClicked({ if ($script:BalloonOpensPage) { Open-Page } })
+$script:Notify.add_BalloonTipClicked({
+  if ($script:BalloonAction -eq 'page') { Open-Page }
+  elseif ($script:BalloonAction -eq 'update') { Start-Update }
+})
 $script:Notify.Visible = $true
 
 # ---- first-run hint (once per PC, marker next to this script) ----
 $marker = Join-Path $PSScriptRoot 'tray-welcomed'
 if (-not (Test-Path -LiteralPath $marker)) {
-  $script:BalloonOpensPage = $false
+  $script:BalloonAction = ''
   $script:Notify.ShowBalloonTip(8000, 'Signal Agent', 'Signal Agent is running ' + [char]0x2014 + ' it lives here in the tray', [System.Windows.Forms.ToolTipIcon]::Info)
   try { Set-Content -LiteralPath $marker -Value 'shown' } catch { }
 }
@@ -144,8 +169,14 @@ $script:Timer.add_Tick({
       $new = $r
     }
   }
+  $u = $s.update
+  if ($u -ne $null -and [bool]$u.available -and -not [bool]$u.downloading -and [string]$u.latest -ne $script:UpdateSeen) {
+    $script:UpdateSeen = [string]$u.latest
+    $script:BalloonAction = 'update'
+    $script:Notify.ShowBalloonTip(10000, 'Signal Agent update', 'Version ' + [string]$u.latest + ' is available ' + [char]0x2014 + ' click to install', [System.Windows.Forms.ToolTipIcon]::Info)
+  }
   if ($new -ne $null) {
-    $script:BalloonOpensPage = $true
+    $script:BalloonAction = 'page'
     $who = [string]$new.deviceName
     if (-not $who) { $who = 'A phone' }
     $script:Notify.ShowBalloonTip(10000, 'Phone wants to pair', $who + ' wants to pair ' + [char]0x2014 + ' click to approve', [System.Windows.Forms.ToolTipIcon]::Info)

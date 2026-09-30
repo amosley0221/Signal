@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG_FILE_NAME = 'signal-agent.config.json';
 export const DEFAULT_CONFIG_PATH = path.join(AGENT_DIR, CONFIG_FILE_NAME);
+export const DEFAULT_PLEX_URL = 'http://127.0.0.1:32400';
 export const LIBRARY_TYPES = ['music', 'musicvideos', 'movies', 'tv'];
 
 /**
@@ -117,8 +118,9 @@ export function validateSetup(body, { isDir = () => true, platform = process.pla
     const libName = String(l.name ?? '').trim().slice(0, 80) || p.basename(abs) || abs;
     libraries.push({ id, name: libName, type, path: abs });
   });
-  const plexUrl = String(b.plex?.url ?? '').trim().replace(/\/+$/, '');
   const plexToken = String(b.plex?.token ?? '').trim();
+  // A token with no address almost always means Plex runs on this same PC.
+  const plexUrl = String(b.plex?.url ?? '').trim().replace(/\/+$/, '') || (plexToken ? DEFAULT_PLEX_URL : '');
   if (plexUrl) {
     let u = null;
     try { u = new URL(plexUrl); } catch { /* invalid */ }

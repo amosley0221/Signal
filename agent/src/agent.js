@@ -10,6 +10,7 @@ import { AGENT_DIR, isPackaged, isTailscaleAddress, configOverride } from './con
 import { StartupEntry, launchCommand } from './desktop.js';
 import { lanAddresses, readJsonSync } from './util.js';
 import { logFileFor } from './logfile.js';
+import { Updater, cleanupOldExe } from './updater.js';
 
 /* global __SIGNAL_AGENT_VERSION__ -- replaced at build time in the single-executable bundle */
 export const VERSION = (typeof __SIGNAL_AGENT_VERSION__ === 'string' ? __SIGNAL_AGENT_VERSION__ : null)
@@ -38,6 +39,16 @@ export class Agent {
     this.server = null;
     this.port = null;
     this.bonjour = null;
+    const cfgArg = configOverride();
+    this.updater = this.opts.updater || new Updater({
+      current: VERSION,
+      packaged: isPackaged(),
+      dataDir: config.dataDir,
+      args: cfgArg ? ['--config', cfgArg] : [],
+      log: this.log,
+      // The new copy is already starting; free the port and leave.
+      onRestart: async () => { await this.stop(); process.exit(0); },
+    });
     this.timer = null;
     this.state.onChange((ev) => {
       if (ev.type === 'pair') {
@@ -92,6 +103,7 @@ export class Agent {
       requests: pending.map(({ id, deviceName }) => ({ id, deviceName })),
       devices: this.state.listDevices().length,
       needsSetup: !this.config.libraries.length,
+      update: (({ available, latest, downloading, error }) => ({ available, latest, downloading, error }))(this.updater.state()),
     };
   }
 
@@ -177,6 +189,9 @@ export class Agent {
     if (addrs.length) this.log(`[http] LAN address${addrs.length > 1 ? 'es' : ''}: ${addrs.map((a) => `${a}:${this.port}`).join(', ')}`);
 
     if (this.opts.mdns) this.#advertise();
+    // Self-update (packaged Windows exe only): check now and every 6 h; tidy up after an update.
+    if (this.opts.periodic) this.updater.start();
+    if (isPackaged() && process.platform === 'win32') cleanupOldExe(process.execPath).catch(() => {});
     if (this.opts.initialScan) {
       const first = this.catalog.scan('startup').catch((e) => this.log(`[scan] ${e.message}`));
       if (this.opts.watch) first.then(() => this.catalog.startWatching());
@@ -215,6 +230,7 @@ export class Agent {
 
   async stop() {
     clearInterval(this.timer);
+    this.updater.stop();
     await this.reconfiguring;
     this.catalog.stopWatching();
     this.state.saveSoon.cancel();

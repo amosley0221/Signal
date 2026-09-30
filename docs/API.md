@@ -105,3 +105,10 @@ URLs in the catalogue are relative to the agent base URL; the app appends the to
   (forwarded to Plex when configured).
 - `GET /api/activity` → `[{"id":"j1","kind":"scan|tag|upload|plex","title":"…","detail":"…","state":"queued|running|done|failed","progress":0.62}]`.
 - `POST /api/rescan` → `{"ok":true}` starts a library rescan.
+
+### Updates
+- `GET /api/update` → `{"current":"1.0.4","latest":"1.0.5","available":true,"notes":"…","downloading":false,"error":null}`.
+  Only the packaged Windows `SignalAgent.exe` updates itself; from source `available` is always `false`.
+- `POST /api/update` → `200 {"ok":true}` when the download started (the agent restarts itself a few seconds later),
+  or `409 {"ok":false,"error":"no_update"|"not_supported"}`. Downloads are verified against the release's
+  `SignalAgent.exe.sha256` asset (`<hex>  SignalAgent.exe`); releases without it are refused.

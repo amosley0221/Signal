@@ -36,7 +36,7 @@ async function smokeTest(cmd, args) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'signal-agent-smoke-'));
   const cfg = path.join(tmp, 'signal-agent.config.json');
   fs.writeFileSync(cfg, JSON.stringify({ name: 'SMOKE-TEST', port: 0, libraries: [] }));
-  const child = spawn(cmd, [...args, '--config', cfg, '--no-browser'], { cwd: tmp, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const child = spawn(cmd, [...args, '--config', cfg, '--no-browser', '--no-tray'], { cwd: tmp, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
@@ -52,7 +52,7 @@ async function smokeTest(cmd, args) {
       }, 100);
     });
     const info = await (await fetch(`http://127.0.0.1:${port}/api/info`)).json();
-    if (info.name !== 'SMOKE-TEST' || info.version !== pkg.version) throw new Error(`unexpected /api/info: ${JSON.stringify(info)}`);
+    if (info.name !== 'SMOKE-TEST' || info.version !== APP_VERSION) throw new Error(`unexpected /api/info: ${JSON.stringify(info)}`);
     console.log(`  OK — GET /api/info on port ${port}: ${JSON.stringify(info)}`);
   } catch (e) {
     console.error(out + logText());
@@ -66,6 +66,16 @@ async function smokeTest(cmd, args) {
 }
 
 const pkg = JSON.parse(fs.readFileSync(path.join(AGENT_DIR, 'package.json'), 'utf8'));
+// Releases are tagged with the app version (../version.properties); the exe must report the same
+// version or the self-updater would think it's always out of date.
+const APP_VERSION = (() => {
+  try {
+    const m = /^VERSION_NAME=(.+)$/m.exec(fs.readFileSync(path.join(AGENT_DIR, '..', 'version.properties'), 'utf8'));
+    if (m) return m[1].trim();
+  } catch { /* building outside the repo */ }
+  return pkg.version;
+})();
+const TRAY_PS1 = fs.readFileSync(path.join(AGENT_DIR, 'src', 'tray.ps1'), 'utf8');
 const step = (m) => console.log(`\n> ${m}`);
 
 const [major, minor] = process.versions.node.split('.').map(Number);
@@ -102,7 +112,8 @@ await esbuild.build({
   define: {
     'import.meta.url': '__signal_import_meta_url',
     __SIGNAL_BUNDLED__: 'true',
-    __SIGNAL_AGENT_VERSION__: JSON.stringify(pkg.version),
+    __SIGNAL_AGENT_VERSION__: JSON.stringify(APP_VERSION),
+    __SIGNAL_TRAY_PS1__: JSON.stringify(TRAY_PS1),
   },
   banner: {
     js: [
