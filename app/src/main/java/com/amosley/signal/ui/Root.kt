@@ -145,7 +145,7 @@ fun SignalRoot(st: AppState) {
         if (settings.pc == null && !settings.skippedPairing && st.screen != Screen.Pair) st.push(Screen.Pair)
     }
 
-    BackHandler(enabled = st.sheet != null || st.stack.size > 1 || st.section != Section.MUSIC) { st.back() }
+    BackHandler(enabled = st.sheet != null || st.nowPlayingPane || st.stack.size > 1 || st.section != Section.MUSIC) { st.back() }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
         val unfolded = maxWidth >= 600.dp
@@ -207,11 +207,22 @@ private fun Unfolded(c: Ctx) {
             Box(Modifier.weight(1f).fillMaxHeight()) { SearchScreen(c) }
             return@Row
         }
-        Box(Modifier.width(316.dp).fillMaxHeight().drawBehind {
-            drawRect(C.Hair, Offset(size.width - 1.dp.toPx(), 0f), Size(1.dp.toPx(), size.height))
-        }) { LibraryPane(c) }
-        Box(Modifier.weight(1f).fillMaxHeight()) {
-            if (screen is Screen.Library) NowPlayingContent(c, pane = true) else ScreenContent(c, screen)
+        // Nothing opened: the library uses the whole width (more columns), with a mini player while music plays.
+        // Opening an album, show, movie or Now Playing splits it: library on the left, that on the right.
+        // The library stays in the same place in both cases, so its scroll position is kept.
+        val split = screen !is Screen.Library || c.st.nowPlayingPane
+        Column(
+            (if (split) Modifier.width(360.dp) else Modifier.weight(1f)).fillMaxHeight().drawBehind {
+                if (split) drawRect(C.Hair, Offset(size.width - 1.dp.toPx(), 0f), Size(1.dp.toPx(), size.height))
+            },
+        ) {
+            Box(Modifier.weight(1f).fillMaxWidth()) { LibraryPane(c) }
+            // Mini player: under the library, unless Now Playing itself is open on the right.
+            val showMini = if (split) !c.st.nowPlayingPane && screen !is Screen.Library else true
+            if (showMini && c.player.current != null) MiniPlayer(c)
+        }
+        if (split) Box(Modifier.weight(1f).fillMaxHeight()) {
+            if (c.st.nowPlayingPane || screen is Screen.Library) NowPlayingContent(c, pane = true) else ScreenContent(c, screen)
         }
     }
 }

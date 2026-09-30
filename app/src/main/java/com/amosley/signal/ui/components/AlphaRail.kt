@@ -51,6 +51,9 @@ class JumpIndex {
     var size = 0
     var letters: Map<Char, Int> = emptyMap()
     var bubbles: List<String?> = emptyList()
+    /** Grid widths for the current pane (set by LibraryPane from its width). */
+    var posterCols = 3
+    var albumCols = 2
 
     fun reset() { count = 0; start = -1; perRow = 1; size = 0; letters = emptyMap(); bubbles = emptyList() }
 

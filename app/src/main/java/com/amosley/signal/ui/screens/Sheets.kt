@@ -88,7 +88,8 @@ fun SheetHost(c: Ctx) {
     val sheet = c.st.sheet ?: return
     if (sheet is Sheet.NowPlaying) {
         if (c.unfolded) {
-            LaunchedEffect(Unit) { c.st.sheet = null }
+            // Unfolded: Now Playing opens in the right pane instead of covering the screen.
+            LaunchedEffect(Unit) { c.st.nowPlayingPane = true; c.st.sheet = null }
             return
         }
         Box(

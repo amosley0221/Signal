@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.33] - 2026-10-01
+
+### Unfolded: the library uses the whole screen
+- On the unfolded Fold, the library now fills the whole screen until you open something, with more posters and albums per row. It no longer sits beside an empty "Nothing playing" panel.
+- Opening an album, show, movie or artist splits the screen: the library on the left, that page on the right. Back returns to the full-width library, which keeps your place.
+- While music plays, a mini player sits at the bottom. Tapping it opens Now Playing on the right; the arrow at its top left (or Back) closes it again.
+
 ## [1.0.32] - 2026-10-01
 
 ### Download a whole season or series

@@ -136,10 +136,8 @@ fun NowPlayingContent(c: Ctx, pane: Boolean) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         // Header row
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (!pane) {
-                Box(Modifier.size(34.dp).clickable { c.st.sheet = null }, contentAlignment = Alignment.CenterStart) {
-                    Icon(Icons.Filled.KeyboardArrowDown, "Close", tint = C.Fg)
-                }
+            Box(Modifier.size(34.dp).clickable { if (pane) c.st.nowPlayingPane = false else c.st.sheet = null }, contentAlignment = Alignment.CenterStart) {
+                Icon(Icons.Filled.KeyboardArrowDown, "Close", tint = C.Fg)
             }
             Mono(if (c.player.output != null) "Playing on ${c.player.output}" else "Now playing · on device", color = C.Muted, modifier = Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -118,9 +119,14 @@ fun LibraryPane(c: Ctx) {
     val section = if (c.unfolded && st.section == Section.SETTINGS) Section.MUSIC else st.section
     val listState = rememberLazyListState()
     val jump = remember { JumpIndex() }
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // More columns when the pane is wide (unfolded, full width).
+        val posterCols = (maxWidth / 150.dp).toInt().coerceIn(POSTER_COLS, 8)
+        val albumCols = (maxWidth / 190.dp).toInt().coerceIn(ALBUM_COLS, 6)
         LazyColumn(Modifier.fillMaxSize(), state = listState) {
             jump.reset()
+            jump.posterCols = posterCols
+            jump.albumCols = albumCols
             counted(jump) {
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
@@ -160,7 +166,7 @@ fun LibraryPane(c: Ctx) {
                 Section.MUSIC -> {
                     counted(jump) { SubTabs(c) }
                     when (st.tab) {
-                        MusicTab.RECENT -> recent(c)
+                        MusicTab.RECENT -> recent(c, jump.albumCols)
                         MusicTab.SONGS -> songs(c, jump)
                         MusicTab.ALBUMS -> albums(c, jump)
                         MusicTab.ARTISTS -> artists(c, jump)
@@ -283,7 +289,7 @@ fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
     }
 }
 
-private fun LazyListScope.recent(c: Ctx) {
+private fun LazyListScope.recent(c: Ctx, albumCols: Int) {
     val cand = importCandidates(c)
     if (cand.isNotEmpty()) item {
         Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
@@ -322,10 +328,10 @@ private fun LazyListScope.recent(c: Ctx) {
     val thisWeek = recent.filter { it.addedAt > weekAgo }
     item { SectionLabel(if (thisWeek.isNotEmpty()) "Added this week" else "Recently added", Modifier.padding(horizontal = 20.dp)) }
     songRows(c, (thisWeek.ifEmpty { recent }).take(if (thisWeek.isEmpty()) 12 else 50), "recent")
-    val recentAlbums = c.lib.albums.filter { it.title != "Singles" }.sortedByDescending { a -> a.tracks.maxOf { it.addedAt } }.take(6)
+    val recentAlbums = c.lib.albums.filter { it.title != "Singles" }.sortedByDescending { a -> a.tracks.maxOf { it.addedAt } }.take(albumCols * 3)
     if (recentAlbums.isNotEmpty()) {
         item { SectionLabel("Recent albums", Modifier.padding(horizontal = 20.dp)) }
-        albumGrid(c, recentAlbums, "recent-albums")
+        albumGrid(c, recentAlbums, "recent-albums", albumCols)
     }
 }
 
@@ -380,8 +386,7 @@ private fun LazyListScope.songs(c: Ctx, jump: JumpIndex) {
     songRows(c, all, "songs")
 }
 
-fun LazyListScope.albumGrid(c: Ctx, albums: List<Album>, key: String) {
-    val cols = ALBUM_COLS
+fun LazyListScope.albumGrid(c: Ctx, albums: List<Album>, key: String, cols: Int = 2) {
     items(albums.chunked(cols), key = { row -> "$key-${row.first().key}" }) { row ->
         Row(Modifier.padding(horizontal = 20.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             row.forEach { a ->
@@ -407,10 +412,10 @@ private fun LazyListScope.albums(c: Ctx, jump: JumpIndex) {
     val pref = sortPref(c, SortTab.ALBUMS)
     val list = Sorting.albums(c.lib.albums, pref)
     jump.mark(
-        list.map { if (pref.key == SortKey.ARTIST) it.artist else it.title }, perRow = ALBUM_COLS,
+        list.map { if (pref.key == SortKey.ARTIST) it.artist else it.title }, perRow = jump.albumCols,
         bubbles = list.map { a -> bubbleFor(pref.key, a.tracks.maxOfOrNull { it.addedAt } ?: 0, a.year, null, 0) },
     )
-    albumGrid(c, list, "albums")
+    albumGrid(c, list, "albums", jump.albumCols)
 }
 
 private fun LazyListScope.artists(c: Ctx, jump: JumpIndex) {
@@ -518,8 +523,7 @@ fun PosterBadge(c: Ctx, id: String, origin: Origin, modifier: Modifier = Modifie
     }
 }
 
-private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, cell: @Composable (Int, Modifier) -> Unit) {
-    val cols = POSTER_COLS
+private fun LazyListScope.posterGrid(c: Ctx, cols: Int, count: Int, key: (Int) -> String, cell: @Composable (Int, Modifier) -> Unit) {
     val rows = (0 until count).chunked(cols)
     items(rows, key = { "$it-${key(it.first())}" }) { row ->
         Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -539,8 +543,8 @@ private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
     counted(jump) { SortBar(c, SortTab.MOVIES) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
     val mpref = sortPref(c, SortTab.MOVIES)
-    jump.mark(list.map { it.title }, perRow = POSTER_COLS, bubbles = list.map { bubbleFor(mpref.key, it.addedAt, it.year, it.rating, it.durationMs) })
-    posterGrid(c, list.size, { list[it].id }) { i, m ->
+    jump.mark(list.map { it.title }, perRow = jump.posterCols, bubbles = list.map { bubbleFor(mpref.key, it.addedAt, it.year, it.rating, it.durationMs) })
+    posterGrid(c, jump.posterCols, list.size, { list[it].id }) { i, m ->
         val mv = list[i]
         Column(m.clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
             Art(mv.title, mv.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
@@ -568,8 +572,8 @@ private fun LazyListScope.shows(c: Ctx, jump: JumpIndex) {
     counted(jump) { SortBar(c, SortTab.SHOWS) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
     val spref = sortPref(c, SortTab.SHOWS)
-    jump.mark(list.map { it.title }, perRow = POSTER_COLS, bubbles = list.map { bubbleFor(spref.key, it.addedAt, it.year, it.rating, 0) })
-    posterGrid(c, list.size, { list[it].id }) { i, m ->
+    jump.mark(list.map { it.title }, perRow = jump.posterCols, bubbles = list.map { bubbleFor(spref.key, it.addedAt, it.year, it.rating, 0) })
+    posterGrid(c, jump.posterCols, list.size, { list[it].id }) { i, m ->
         val sh = list[i]
         Column(m.clickable { c.st.season = null; c.st.push(Screen.ShowPage(sh.id)) }) {
             Art(sh.title, sh.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {

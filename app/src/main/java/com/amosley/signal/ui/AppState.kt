@@ -70,6 +70,8 @@ class AppState : ViewModel() {
     var batchIdx = mutableStateOf(mapOf<String, Int>())
     var importIdx = mutableStateOf(mapOf<String, Int>())
     var pip by mutableStateOf(false)
+    /** Unfolded: Now Playing open in the right pane (otherwise the library uses the full width). */
+    var nowPlayingPane by mutableStateOf(false)
     /** Sonos rooms (uuid) grouped with the active Sonos output. */
     var sonosGroup by mutableStateOf(setOf<String>())
     var sonosVolume by mutableStateOf(30)
@@ -79,12 +81,17 @@ class AppState : ViewModel() {
     val screen: Screen get() = stack.last()
 
     fun push(s: Screen) {
+        nowPlayingPane = false
         if (stack.last() != s) stack.add(s)
     }
 
     fun back(): Boolean {
         if (sheet != null) {
             sheet = null
+            return true
+        }
+        if (nowPlayingPane) {
+            nowPlayingPane = false
             return true
         }
         if (stack.size > 1) {
