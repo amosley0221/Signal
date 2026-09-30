@@ -13,7 +13,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:exe": "node scripts/build-exe.mjs"
   },
   "license": "UNLICENSED",
   "dependencies": {

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Entry point: `node src/index.js [--config path/to/signal-agent.config.json]`
+// Entry point: `node src/index.js [--config path/to/signal-agent.config.json] [--no-browser]`
+// Also the entry of the single-executable build (SignalAgent.exe), see scripts/build-exe.mjs.
 import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
-import { loadConfig, resolveConfigPath, normalizeConfig } from './config.js';
+import { loadConfig, resolveConfigPath, normalizeConfig, isPackaged } from './config.js';
 import { Agent, VERSION } from './agent.js';
+import { openBrowser } from './desktop.js';
 
 export { Agent, VERSION, loadConfig, normalizeConfig };
 
@@ -68,22 +70,84 @@ function startConsole(agent) {
   return rl;
 }
 
-export async function main() {
-  const configPath = resolveConfigPath();
+/** Print an error and exit. When packaged, keep the console window open so it can be read. */
+async function fatal(msg) {
+  console.error(`\n${msg}\n`);
+  if (isPackaged() && process.stdin.isTTY) {
+    console.error('Press Enter to close this window.');
+    await new Promise((r) => {
+      const rl = readline.createInterface({ input: process.stdin });
+      rl.once('line', () => { rl.close(); r(); });
+      setTimeout(r, 10 * 60 * 1000).unref();
+    });
+  }
+  process.exit(1);
+}
+
+/** Is a Signal Agent already answering on this port? Returns its /api/info or null. */
+export async function probeExisting(port, host = '127.0.0.1') {
+  try {
+    const r = await fetch(`http://${host}:${port}/api/info`, { signal: AbortSignal.timeout(1500) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j && typeof j.id === 'string' && typeof j.version === 'string' ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+function banner(port, needsSetup) {
+  const url = `http://localhost:${port}/`;
+  const line = '='.repeat(72);
+  console.log([
+    '',
+    line,
+    `  Signal Agent is running. Setup: ${url}`,
+    '  Keep this window open (or turn on Start with Windows on the setup page).',
+    needsSetup ? '  First time? Open the setup page above and add your music/video folders.' : null,
+    line,
+    '',
+  ].filter((l) => l !== null).join('\n'));
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const packaged = isPackaged();
+  const noBrowser = argv.includes('--no-browser');
+  const wantBrowser = packaged ? !noBrowser : argv.includes('--open-browser');
+  if (packaged) process.title = 'Signal Agent';
+  const configPath = resolveConfigPath(argv);
   let config;
   try {
     config = loadConfig(configPath);
   } catch (e) {
-    console.error(`Could not read config ${configPath}: ${e.message}`);
-    process.exit(1);
+    return fatal(`Could not read the settings file ${configPath}: ${e.message}\nFix or delete that file, then start Signal Agent again.`);
   }
+
+  // Another copy already running? Point the browser at it instead of starting a second one.
+  const existing = await probeExisting(config.port);
+  if (existing) {
+    console.log(`Signal Agent is already running on this PC (port ${config.port}). Its setup page: http://localhost:${config.port}/`);
+    if (!noBrowser) openBrowser(`http://localhost:${config.port}/`);
+    process.exit(0);
+  }
+
   const agent = new Agent(config);
   try {
     await agent.start();
   } catch (e) {
-    console.error(`Could not start: ${e.message}`);
-    process.exit(1);
+    if (e.code === 'EADDRINUSE') {
+      const again = await probeExisting(config.port);
+      if (again) {
+        console.log(`Signal Agent is already running on this PC (port ${config.port}).`);
+        if (!noBrowser) openBrowser(`http://localhost:${config.port}/`);
+        process.exit(0);
+      }
+      return fatal(`Port ${config.port} is already used by another program, so Signal Agent cannot start.\nClose that program, or set a different "port" in ${config.configPath}.`);
+    }
+    return fatal(`Could not start: ${e.message}`);
   }
+  banner(agent.port, !config.libraries.length);
+  if (wantBrowser) openBrowser(`http://localhost:${agent.port}/`);
   let rl = null;
   if (process.stdin.isTTY) {
     rl = startConsole(agent);
@@ -104,6 +168,7 @@ export async function main() {
   process.on('unhandledRejection', (e) => agent.log(`[agent] unhandled rejection: ${e?.stack || e}`));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/* global __SIGNAL_BUNDLED__ -- defined by scripts/build-exe.mjs; the bundle calls main() itself */
+if (typeof __SIGNAL_BUNDLED__ === 'undefined' && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main();
 }
