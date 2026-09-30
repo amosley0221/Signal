@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.26] - 2026-10-01
+
+### Artists stay separate on combined albums
+- After combining a soundtrack under "Various Artists", each performer (e.g. Buck Tillery) now keeps their own entry in **Artists** instead of being listed under "Various Artists". The album itself stays combined in **Albums**.
+- The Artists tab now uses each song's own artist. The album artist is used only when it is one of the song's artists (e.g. "Metro Boomin & 21 Savage" on a 21 Savage album) or when a song has no artist.
+- An artist's page now also shows albums they appear on, such as a soundtrack.
+
 ## [1.0.25] - 2026-10-01
 
 ### Combine soundtracks and compilations into one album

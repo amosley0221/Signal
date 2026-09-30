@@ -317,7 +317,8 @@ fun PlaylistScreen(c: Ctx, id: String) {
 fun ArtistScreen(c: Ctx, name: String) {
     val tracks = c.lib.artistTracks(name).sortedWith(compareBy<Track>({ it.album ?: "~" }).then(com.amosley.signal.core.trackOrder))
     val albums = com.amosley.signal.core.Sorting.albums(
-        c.lib.albums.filter { a -> a.artist == name || (a.tracks.isNotEmpty() && a.tracks.all { c.lib.artistOf[it.id] == name }) }, sortPref(c, com.amosley.signal.core.SortTab.ARTIST_ALBUMS),
+        // Their own albums, plus albums they appear on (e.g. a soundtrack under "Various Artists").
+        c.lib.albums.filter { a -> a.artist == name || a.tracks.any { c.lib.artistOf[it.id] == name } }, sortPref(c, com.amosley.signal.core.SortTab.ARTIST_ALBUMS),
     )
     LazyColumn(Modifier.fillMaxSize()) {
         item {

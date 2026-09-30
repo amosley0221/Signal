@@ -25,4 +25,12 @@ class ArtistNamesTest {
         val m = ArtistNames.primary(listOf(t("a", "Metro Boomin & 21 Savage", albumArtist = "21 Savage")))
         assertEquals("21 Savage", m["a"])
     }
+
+    @Test fun compilationAlbumArtistDoesNotHideTheRealArtists() {
+        val m = ArtistNames.primary(listOf(
+            t("a", "Buck Tillery", albumArtist = "Various Artists"), t("b", "June Marlowe & The Night Shift", albumArtist = "Various Artists"),
+        ))
+        assertEquals("Buck Tillery", m["a"])
+        assertEquals("June Marlowe & The Night Shift", m["b"])
+    }
 }
