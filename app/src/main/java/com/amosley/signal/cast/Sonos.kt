@@ -1,6 +1,9 @@
 package com.amosley.signal.cast
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import com.amosley.signal.playback.OutputKind
 import com.amosley.signal.playback.RemoteItem
@@ -9,6 +12,7 @@ import com.amosley.signal.playback.RemoteState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,10 +24,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.DatagramPacket
+import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.MulticastSocket
 import java.net.SocketTimeoutException
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 data class SonosRoom(val uuid: String, val name: String, val model: String, val ip: String) {
     val base: String get() = "http://$ip:1400"
@@ -39,49 +47,148 @@ class SonosController(private val context: Context, private val http: OkHttpClie
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning
 
+    private val prefs = context.getSharedPreferences("sonos", Context.MODE_PRIVATE)
+
+    /** The phone's Wi-Fi network. Sockets bound to it bypass a VPN, which otherwise swallows SSDP and LAN traffic. */
+    private fun wifiNetwork(): Network? {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        @Suppress("DEPRECATION")
+        return cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+    }
+
+    @Volatile private var lanClient: Pair<Network?, OkHttpClient>? = null
+
+    /** HTTP client for talking to speakers: short timeouts, routed over Wi-Fi even when a VPN is on. */
+    private fun lan(): OkHttpClient {
+        val net = wifiNetwork()
+        lanClient?.let { (n, c) -> if (n == net) return c }
+        val c = http.newBuilder()
+            .connectTimeout(2, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS)
+            .apply { if (net != null) socketFactory(net.socketFactory) }
+            .build()
+        lanClient = net to c
+        return c
+    }
+
+    /**
+     * Finds Sonos rooms, showing each as soon as it answers:
+     * 1. rooms found last time (checked directly, so they appear almost instantly);
+     * 2. SSDP multicast on the Wi-Fi interface;
+     * 3. the zone topology of any room found, which lists every other room;
+     * 4. if still nothing, a quick sweep of the Wi-Fi subnet for Sonos' port 1400.
+     */
     fun discover() {
         if (_scanning.value) return
         _scanning.value = true
         scope.launch(Dispatchers.IO) {
-            val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            val lock = wifi.createMulticastLock("signal-sonos").apply { setReferenceCounted(false) }
             val found = LinkedHashMap<String, SonosRoom>()
+            val tried = java.util.Collections.synchronizedSet(HashSet<String>())
+            fun add(r: SonosRoom) = synchronized(found) {
+                found[r.uuid] = r
+                _rooms.value = found.values.sortedBy { it.name }
+            }
+            suspend fun check(location: String) {
+                if (!tried.add(location)) return
+                runCatching { describe(location) }.getOrNull()?.let(::add)
+            }
             runCatching {
-                lock.acquire()
-                MulticastSocket(null).use { sock ->
-                    sock.reuseAddress = true
-                    sock.bind(null)
-                    sock.soTimeout = 1000
-                    val msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n" +
-                        "ST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n").toByteArray()
-                    val group = InetAddress.getByName("239.255.255.250")
-                    repeat(2) { sock.send(DatagramPacket(msg, msg.size, group, 1900)) }
-                    val buf = ByteArray(2048)
-                    val end = System.currentTimeMillis() + 3000
-                    val locations = LinkedHashSet<String>()
-                    while (System.currentTimeMillis() < end) {
-                        try {
-                            val p = DatagramPacket(buf, buf.size)
-                            sock.receive(p)
-                            val text = String(p.data, 0, p.length)
-                            Regex("(?im)^LOCATION:\\s*(\\S+)").find(text)?.groupValues?.get(1)?.let { locations += it }
-                        } catch (_: SocketTimeoutException) {
-                        }
-                    }
-                    for (loc in locations) {
-                        val room = runCatching { describe(loc) }.getOrNull() ?: continue
-                        found[room.uuid] = room
-                    }
+                coroutineScope {
+                    cached().forEach { r -> launch { check("http://${r.ip}:1400/xml/device_description.xml") } }
+                    launch { ssdp { loc -> launch { check(loc) } } }
+                }
+                // Every room the found ones know about (catches rooms that missed the multicast).
+                synchronized(found) { found.values.toList() }.firstOrNull()?.let { r ->
+                    val locs = runCatching { topologyLocations(r) }.getOrDefault(emptyList())
+                    coroutineScope { locs.forEach { launch { check(it) } } }
+                }
+                if (synchronized(found) { found.isEmpty() }) {
+                    coroutineScope { subnetHosts().forEach { ip -> launch { if (port1400Open(ip)) check("http://$ip:1400/xml/device_description.xml") } } }
                 }
             }
-            if (lock.isHeld) lock.release()
-            _rooms.value = found.values.sortedBy { it.name }
+            val all = synchronized(found) { found.values.sortedBy { it.name } }
+            _rooms.value = all
+            if (all.isNotEmpty()) prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
             _scanning.value = false
         }
     }
 
+    private fun cached(): List<SonosRoom> = prefs.getString("rooms", null).orEmpty().lines().mapNotNull { l ->
+        val p = l.split('\t')
+        if (p.size == 4) SonosRoom(p[0], p[1], p[2], p[3]) else null
+    }
+
+    /** SSDP M-SEARCH for Sonos players; calls [onLocation] for each reply's description URL. */
+    private suspend fun ssdp(onLocation: (String) -> Unit) = withContext(Dispatchers.IO) {
+        val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val lock = wifi.createMulticastLock("signal-sonos").apply { setReferenceCounted(false) }
+        try {
+            lock.acquire()
+            MulticastSocket(null).use { sock ->
+                sock.reuseAddress = true
+                sock.bind(null)
+                val net = wifiNetwork()
+                if (net != null) {
+                    runCatching { net.bindSocket(sock) }
+                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                    cm.getLinkProperties(net)?.interfaceName?.let { name ->
+                        runCatching { NetworkInterface.getByName(name)?.let { sock.networkInterface = it } }
+                    }
+                }
+                sock.timeToLive = 4
+                sock.soTimeout = 500
+                val group = InetAddress.getByName("239.255.255.250")
+                fun search(st: String) {
+                    val msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: $st\r\n\r\n").toByteArray()
+                    runCatching { sock.send(DatagramPacket(msg, msg.size, group, 1900)) }
+                }
+                val buf = ByteArray(2048)
+                val start = System.currentTimeMillis()
+                var sent = 0
+                while (System.currentTimeMillis() - start < 4000) {
+                    // Resend a few times: Wi-Fi drops multicast packets easily.
+                    if (sent < 3 && System.currentTimeMillis() - start >= sent * 1000L) {
+                        search("urn:schemas-upnp-org:device:ZonePlayer:1")
+                        if (sent == 0) search("urn:smartspeaker-audio:service:SpeakerGroup:1")
+                        sent++
+                    }
+                    try {
+                        val p = DatagramPacket(buf, buf.size)
+                        sock.receive(p)
+                        val text = String(p.data, 0, p.length)
+                        if (!text.contains("Sonos", ignoreCase = true) && !text.contains("ZonePlayer")) continue
+                        Regex("(?im)^LOCATION:\\s*(\\S+)").find(text)?.groupValues?.get(1)?.let(onLocation)
+                    } catch (_: SocketTimeoutException) {
+                    }
+                }
+            }
+        } finally {
+            if (lock.isHeld) lock.release()
+        }
+    }
+
+    /** Description URLs of every player in [room]'s household, from ZoneGroupTopology. */
+    private suspend fun topologyLocations(room: SonosRoom): List<String> {
+        val xml = soap(room, "/ZoneGroupTopology/Control", "ZoneGroupTopology", "GetZoneGroupState", emptyList())
+        return Regex("Location=(?:&quot;|\")(http://[^&\"]+)").findAll(xml).map { it.groupValues[1] }.distinct().toList()
+    }
+
+    /** Other addresses on the phone's Wi-Fi subnet (at most a /24 around the phone). */
+    private fun subnetHosts(): List<String> {
+        val net = wifiNetwork() ?: return emptyList()
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val own = cm.getLinkProperties(net)?.linkAddresses?.map { it.address }?.filterIsInstance<Inet4Address>()?.firstOrNull() ?: return emptyList()
+        val b = own.address.map { it.toInt() and 0xff }
+        return (1..254).filter { it != b[3] }.map { "${b[0]}.${b[1]}.${b[2]}.$it" }
+    }
+
+    private fun port1400Open(ip: String): Boolean = runCatching {
+        val sf = wifiNetwork()?.socketFactory ?: javax.net.SocketFactory.getDefault()
+        sf.createSocket().use { it.connect(InetSocketAddress(ip, 1400), 400) }
+        true
+    }.getOrDefault(false)
+
     private fun describe(location: String): SonosRoom? {
-        val xml = http.newCall(Request.Builder().url(location).build()).execute().use { it.body?.string() } ?: return null
+        val xml = lan().newCall(Request.Builder().url(location).build()).execute().use { it.body?.string() } ?: return null
         fun tag(name: String) = Regex("<$name>([^<]*)</$name>").find(xml)?.groupValues?.get(1)
         val uuid = tag("UDN")?.removePrefix("uuid:") ?: return null
         val name = tag("roomName") ?: return null
@@ -107,7 +214,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
                 .header("SOAPACTION", "\"urn:schemas-upnp-org:service:$service:1#$action\"")
                 .post(body.toRequestBody("text/xml; charset=\"utf-8\"".toMediaType()))
                 .build()
-            http.newCall(req).execute().use { res ->
+            lan().newCall(req).execute().use { res ->
                 val text = res.body?.string().orEmpty()
                 if (!res.isSuccessful) error("Sonos $action failed (${res.code})")
                 text

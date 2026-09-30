@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.13] - 2026-09-30
+
+### Faster, more reliable Sonos discovery
+- Speakers found before now appear almost instantly when you open **Play on**. Signal remembers them and checks them directly.
+- Speakers are found and controlled over Wi-Fi even when a VPN is on. A VPN used to block the Sonos search, so speakers could take a long time to show up or not show up at all.
+- The search is repeated a few times, because Wi-Fi often drops the broadcast. Once one speaker answers, Signal asks it for every other room in the house.
+- If the broadcast search still finds nothing, Signal checks the Wi-Fi network directly for Sonos speakers.
+- Each room appears as soon as it answers, instead of all at once at the end.
+
 ## [1.0.12] - 2026-09-30
 
 ### A–Z scrub bar for big libraries
