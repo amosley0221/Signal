@@ -32,7 +32,7 @@ describe('config location', () => {
   });
   test('data dir defaults next to the config file', () => {
     const cfg = normalizeConfig({}, '/home/ann/.config/signal-agent');
-    assert.equal(cfg.dataDir, '/home/ann/.config/signal-agent/data');
+    assert.equal(cfg.dataDir, path.resolve('/home/ann/.config/signal-agent', 'data'));
   });
   test('packaged detection', () => {
     assert.equal(isPackagedRuntime({ isSea: true }), true);
