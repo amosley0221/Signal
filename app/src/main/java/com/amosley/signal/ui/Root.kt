@@ -77,6 +77,7 @@ class Ctx(
     val playlists: List<UserPlaylist>,
     /** Bumps when custom art changes; read so art recomposes. */
     val artVersion: Int = 0,
+    val favorites: Set<String> = emptySet(),
 ) {
     val repo get() = app.repo
     val hub get() = app.hub
@@ -99,6 +100,11 @@ class Ctx(
     fun unavailable(t: Track): Boolean = t.origin == Origin.PC && dlState(t.id) !is DlState.Done && (settings.offline || !status.reachable)
     fun track(id: String): Track? = lib.tracks.firstOrNull { it.id == id }
     fun toast(msg: String) = app.toast(msg)
+    fun isFavorite(id: String) = id in favorites
+    fun toggleFavorite(t: Track) {
+        val now = repo.toggleFavorite(t.id)
+        toast(if (now) "Added to Favorites" else "Removed from Favorites")
+    }
 
     fun srcLabel(t: Track): String = when {
         player.current?.id == t.id && player.output != null -> "Playing on ${player.output}"
@@ -122,6 +128,7 @@ fun SignalRoot(st: AppState) {
     val dl by app.repo.downloads.states.collectAsState()
     val playlists by app.repo.playlists.collectAsState()
     val artVersion by app.repo.artVersion.collectAsState()
+    val favorites by app.repo.favorites.collectAsState()
 
     LaunchedEffect(Unit) {
         app.toasts.collect { msg ->
@@ -142,7 +149,7 @@ fun SignalRoot(st: AppState) {
 
     BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
         val unfolded = maxWidth >= 600.dp
-        val c = Ctx(app, st, lib, player, settings, status, dl, unfolded, playlists, artVersion)
+        val c = Ctx(app, st, lib, player, settings, status, dl, unfolded, playlists, artVersion, favorites)
         val screen = st.screen
         when {
             screen is Screen.Video -> VideoScreen(c, screen)

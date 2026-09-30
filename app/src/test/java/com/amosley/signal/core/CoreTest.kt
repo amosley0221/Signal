@@ -125,3 +125,56 @@ class SortingTest {
         assertEquals(listOf("Y", "X", "Z"), r.map { it.first })
     }
 }
+
+class WatchingTest {
+    private fun ep(id: String, s: Int, e: Int, watched: Boolean = false, offset: Long = 0, viewed: Long? = null, added: Long = 1) =
+        Episode(id, s, e, "E$e", durationMs = 3_000_000, viewOffsetMs = offset, watched = watched, lastViewedAt = viewed, addedAt = added)
+    private fun show(id: String, vararg eps: Episode) = Show(id, id, seasons = eps.groupBy { it.season }.map { (n, l) -> Season(n, l) })
+
+    @Test fun upNextIsEpisodeAfterLastWatched() {
+        val sh = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20), ep("3", 1, 3), ep("4", 2, 1))
+        assertEquals("3", Watching.upNext(listOf(sh)).single().episode!!.id)
+    }
+
+    @Test fun inProgressGoesToContinueWatchingNotUpNext() {
+        val sh = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, offset = 600_000, viewed = 30))
+        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(sh)))
+        assertEquals("2", Watching.continueWatching(emptyList(), listOf(sh)).single().episode!!.id)
+    }
+
+    @Test fun newEpisodeAfterCatchingUpAppearsInUpNext() {
+        val caughtUp = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20))
+        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(caughtUp)))
+        val withNew = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20), ep("3", 1, 3, added = 99))
+        val item = Watching.upNext(listOf(withNew)).single()
+        assertEquals("3", item.episode!!.id)
+        assertEquals(99L, item.sortKey) // newly added episode bumps the show to the front
+    }
+
+    @Test fun watchedAtCredits() {
+        assertTrue(Watching.isWatched(2_700_000, 3_000_000))
+        assertEquals(false, Watching.isWatched(2_000_000, 3_000_000))
+    }
+
+    @Test fun localProgressWinsWhenNewer() {
+        val e = ep("1", 1, 1, offset = 100_000, viewed = 10)
+        assertEquals(500_000L, Watching.applyLocal(e, WatchProgress(500_000, 3_000_000, false, 20)).viewOffsetMs)
+        assertEquals(100_000L, Watching.applyLocal(e, WatchProgress(500_000, 3_000_000, false, 5)).viewOffsetMs)
+    }
+}
+
+class VideoNamesTest {
+    @Test fun releaseNames() {
+        assertEquals(VideoNames.Parsed("Minions and Monsters", 2026), VideoNames.parse("Minions.and.Monsters.2026.2160p.iT.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-BYNDR.mkv"))
+        assertEquals(VideoNames.Parsed("Low Orbit", 2025), VideoNames.parse("Low Orbit (2025).mp4"))
+        assertEquals(VideoNames.Parsed("2012", 2009), VideoNames.parse("2012.2009.1080p.BluRay.x264.mkv"))
+        assertEquals("Home Video", VideoNames.parse("Home_Video.mp4").title)
+        assertEquals(Triple("The Ballast", 1, 4), VideoNames.parseEpisode("The.Ballast.S01E04.1080p.WEB.mkv"))
+    }
+
+    @Test fun matchesPlexTitleWithAmpersand() {
+        val pc = listOf(Movie("m1", title = "Minions & Monsters", year = 2026), Movie("m2", title = "Other", year = 2026))
+        assertEquals("m1", VideoNames.matchMovie(VideoNames.parse("Minions.and.Monsters.2026.2160p.mkv"), pc)?.id)
+        assertEquals(null, VideoNames.matchMovie(VideoNames.Parsed("Minions and Monsters", 2010), pc))
+    }
+}

@@ -94,10 +94,14 @@ class LocalScanner(private val context: Context) {
             while (c.moveToNext()) {
                 val id = c.getLong(0)
                 val name = c.getString(7).orEmpty()
+                // Release-style names ("Minions.and.Monsters.2026.2160p…") → "Minions and Monsters", 2026.
+                val parsed = com.amosley.signal.core.VideoNames.parse(name.ifEmpty { c.getString(1).orEmpty() })
                 out += Movie(
                     id = "locv:$id",
                     origin = Origin.PHONE,
-                    title = c.getString(1)?.takeUnless { it.isBlank() } ?: name.substringBeforeLast('.'),
+                    title = parsed.title.ifBlank { c.getString(1)?.takeUnless { it.isBlank() } ?: name.substringBeforeLast('.') },
+                    year = parsed.year,
+                    fileName = name,
                     durationMs = c.getLong(2),
                     width = c.getInt(3),
                     height = c.getInt(4),

@@ -406,6 +406,9 @@ private fun ColumnScope.ActionsSheet(c: Ctx, trackId: String) {
         }
     }
     Hairline()
+    ActionRow(if (c.isFavorite(t.id)) "Remove from Favorites" else "Add to Favorites", if (c.isFavorite(t.id)) "♥" else "♡", hintColor = C.Amber) {
+        c.toggleFavorite(t); c.st.sheet = null
+    }
     ActionRow("Play next", "Top of queue") { c.hub.playNext(t); c.st.sheet = null }
     ActionRow("Add to queue", "End of queue") { c.hub.addToQueue(t); c.st.sheet = null }
     ActionRow("Add to playlist…") { c.st.sheet = Sheet.AddTo(t.id) }

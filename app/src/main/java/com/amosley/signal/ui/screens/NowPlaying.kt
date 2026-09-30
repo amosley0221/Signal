@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cast
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -171,7 +173,14 @@ fun NowPlayingContent(c: Ctx, pane: Boolean) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        Text(t.title, style = if (pane) T.npTitleUnfolded else T.npTitleFolded, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Row(verticalAlignment = Alignment.Top) {
+            Text(t.title, style = if (pane) T.npTitleUnfolded else T.npTitleFolded, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            val fav = c.isFavorite(t.id)
+            Box(Modifier.size(40.dp).clickable { c.toggleFavorite(t) }, contentAlignment = Alignment.Center) {
+                Icon(if (fav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (fav) "Remove from Favorites" else "Add to Favorites",
+                    tint = if (fav) C.Amber else C.Muted, modifier = Modifier.size(24.dp))
+            }
+        }
         Text(
             t.artist ?: "Unknown artist", style = T.ui(16.sp, 400), color = if (t.artist == null) C.AmberText else C.Muted,
             modifier = Modifier.padding(top = 3.dp).clickable { if (t.artist != null) c.st.openArtist(t.artist) else c.st.sheet = Sheet.Edit(t.id) },

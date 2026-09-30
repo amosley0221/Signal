@@ -35,6 +35,7 @@ sealed interface Screen {
     companion object {
         const val NEEDS_ARTIST = "smart:needs-artist"
         const val RECENT_PLAYLIST = "smart:recent"
+        const val FAVORITES = "smart:favorites"
     }
 }
 

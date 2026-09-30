@@ -129,10 +129,14 @@ private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: St
     Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         certificate?.let { Chip(it, bg = Color.Transparent, fg = C.Fg, border = C.HairStrong) }
         rating?.let { Chip("★ ${"%.1f".format(it)}", bg = C.AmberTint, fg = C.AmberText) }
-        matchedBy?.let { Mono("Matched by $it", style = T.metaMono, color = C.Faint) }
-        Mono("Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable {
-            c.toast("Fix the match in Plex on ${c.pcName}, then rescan")
-        })
+        matchedBy?.takeIf { it != "ON THIS PHONE" }?.let { Mono("Matched by $it", style = T.metaMono, color = C.Faint) }
+        if (matchedBy == "ON THIS PHONE") {
+            Mono("Not found in your Plex library · add it there to get its poster and details", style = T.metaMono, color = C.Faint)
+        } else if (matchedBy != null && matchedBy.startsWith("PLEX")) {
+            Mono("Wrong movie? Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable {
+                c.toast("Use Fix Match on this title in Plex, then Sync now in Signal")
+            })
+        }
     }
 }
 
@@ -209,7 +213,10 @@ fun MovieScreen(c: Ctx, id: String) {
 fun ShowScreen(c: Ctx, id: String) {
     val show = c.lib.shows.firstOrNull { it.id == id } ?: return Missing(c)
     val eps = show.allEpisodes
-    val next = eps.firstOrNull { it.viewOffsetMs > 0 && !it.watched } ?: eps.firstOrNull { !it.watched } ?: eps.firstOrNull()
+    // Same rules as the Continue watching / Up next rows.
+    val next = com.amosley.signal.core.Watching.continueWatching(emptyList(), listOf(show)).firstOrNull()?.episode
+        ?: com.amosley.signal.core.Watching.upNext(listOf(show)).firstOrNull()?.episode
+        ?: eps.firstOrNull { !it.watched } ?: eps.firstOrNull()
     val seasonNo = c.st.season ?: next?.season ?: show.seasons.firstOrNull()?.number ?: 1
     val season = show.seasons.firstOrNull { it.number == seasonNo }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -392,7 +399,7 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
         app.currentVideoItem = castUrl?.let { RemoteItem(it, src.title, null, null, null, "video/mp4", src.durationMs, isVideo = true) }
         app.videoPosition = { player.currentPosition }
         onDispose {
-            if (src.origin == Origin.PC) app.repo.reportProgress(src.id, player.currentPosition, player.duration.coerceAtLeast(dur))
+            app.repo.reportProgress(src.id, player.currentPosition, player.duration.coerceAtLeast(dur))
             player.removeListener(listener)
             player.release()
             app.currentVideoItem = null
@@ -414,7 +421,7 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
                 pos = player.currentPosition
                 if (player.duration > 0) dur = player.duration
             }
-            if (++tick % 30 == 0 && player.isPlaying && src.origin == Origin.PC) app.repo.reportProgress(src.id, pos, dur)
+            if (++tick % 30 == 0 && player.isPlaying) app.repo.reportProgress(src.id, pos, dur)
         }
     }
     LaunchedEffect(ui, playing) {

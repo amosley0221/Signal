@@ -129,6 +129,7 @@ data class Movie(
     val matchedBy: String? = null,
     val viewOffsetMs: Long = 0,
     val watched: Boolean = false,
+    val lastViewedAt: Long? = null,
     val width: Int = 0,
     val height: Int = 0,
     val container: String? = null,
@@ -141,6 +142,8 @@ data class Movie(
     val libraryId: String? = null,
     /** Folder on the phone (phone videos only), used by the folder picker. */
     val folder: String? = null,
+    /** Original file name (phone videos), used to read SxxEyy for TV. */
+    val fileName: String? = null,
 )
 
 @Serializable
@@ -153,6 +156,8 @@ data class Episode(
     val durationMs: Long = 0,
     val viewOffsetMs: Long = 0,
     val watched: Boolean = false,
+    val lastViewedAt: Long? = null,
+    val addedAt: Long = 0,
     val size: Long = 0,
     val container: String? = null,
     val width: Int = 0,

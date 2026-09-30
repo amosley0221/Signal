@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -170,7 +171,13 @@ fun TrackRowNumbered(c: Ctx, t: Track, index: Int, list: List<Track>) {
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text(t.title, style = T.row, color = if (current) C.AmberText else C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(t.title, style = T.row, color = if (current) C.AmberText else C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (c.isFavorite(t.id)) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Filled.Favorite, "Favorite", tint = C.Amber, modifier = Modifier.size(12.dp))
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (t.quality != com.amosley.signal.core.Quality.LOSSY) {
@@ -253,6 +260,7 @@ fun PlaylistScreen(c: Ctx, id: String) {
     val (name, tracks, user) = when (id) {
         Screen.NEEDS_ARTIST -> Triple("Needs an artist", c.lib.tracks.filter { it.artist == null }, false)
         Screen.RECENT_PLAYLIST -> Triple("Recently added", c.lib.tracks.sortedByDescending { it.addedAt }.take(50), false)
+        Screen.FAVORITES -> Triple("Favorites", c.lib.tracks.filter { c.isFavorite(it.id) }.sortedBy { com.amosley.signal.core.Sorting.titleKey(it.title) }, false)
         else -> {
             val pl = c.playlists.firstOrNull { it.id == id } ?: return Missing(c)
             Triple(pl.name, pl.trackIds.mapNotNull { c.track(it) }, true)
@@ -287,7 +295,11 @@ fun PlaylistScreen(c: Ctx, id: String) {
                 onMore = { c.st.sheet = if (id == Screen.NEEDS_ARTIST) Sheet.Edit(t.id) else Sheet.Actions(t.id) },
             )
         }
-        if (tracks.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("Add songs with ⋯ → Add to playlist", color = C.Faint) } }
+        if (tracks.isEmpty()) item {
+            Box(Modifier.padding(20.dp)) {
+                Mono(if (id == Screen.FAVORITES) "Tap ♥ on Now Playing, or ⋯ → Add to Favorites on any song" else "Add songs with ⋯ → Add to playlist", color = C.Faint, maxLines = 2)
+            }
+        }
     }
 }
 

@@ -59,11 +59,12 @@ object PhoneLibrary {
     fun groupShows(videos: List<Movie>): List<Show> {
         data class Ep(val show: String, val season: Int, val episode: Int?, val title: String, val v: Movie)
         val eps = videos.map { v ->
-            val m = episodeRe.find(v.title)
+            val raw = (v.fileName?.substringBeforeLast('.') ?: v.title).replace(Regex("[._]+"), " ")
+            val m = episodeRe.find(raw)
             val folderParts = (v.folder ?: "").split('/').filter { it.isNotBlank() }
             val folderShow = folderParts.lastOrNull { !it.matches(Regex("(?i)season\\s*\\d+|specials")) } ?: "TV"
-            val showFromName = m?.let { v.title.substring(0, it.range.first).trim(' ', '-', '.', '_') }?.takeIf { it.isNotBlank() }
-            val title = m?.let { v.title.substring(it.range.last + 1).trim(' ', '-', '.', '_') }?.ifBlank { null } ?: v.title
+            val showFromName = m?.let { com.amosley.signal.core.VideoNames.parse(raw.substring(0, it.range.first)).title }?.takeIf { it.isNotBlank() }
+            val title = m?.let { com.amosley.signal.core.VideoNames.parse(raw.substring(it.range.last + 1)).title }?.ifBlank { null } ?: v.title
             Ep(showFromName ?: folderShow, m?.groupValues?.get(1)?.toInt() ?: 1, m?.groupValues?.get(2)?.toInt(), title, v)
         }
         return eps.groupBy { it.show.lowercase() }.map { (_, list) ->
@@ -82,5 +83,42 @@ object PhoneLibrary {
                 addedAt = list.maxOf { it.v.addedAt },
             )
         }.sortedBy { it.title.lowercase() }
+    }
+}
+
+/** Phone videos matched to the same titles in the PC / Plex library: Plex details, played from the phone. */
+object PhoneMatch {
+    fun movies(pc: List<Movie>, phone: List<Movie>): List<Movie> {
+        val replaced = HashSet<String>()
+        val merged = phone.map { v ->
+            val m = com.amosley.signal.core.VideoNames.matchMovie(com.amosley.signal.core.VideoNames.Parsed(v.title, v.year), pc.filter { it.id !in replaced })
+            if (m == null) v else {
+                replaced += m.id
+                m.copy(origin = Origin.PHONE, uri = v.uri, container = v.container ?: m.container, size = v.size, folder = v.folder, fileName = v.fileName)
+            }
+        }
+        return pc.filter { it.id !in replaced } + merged
+    }
+
+    fun shows(pc: List<Show>, phone: List<Show>): List<Show> {
+        val byKey = pc.associateBy { com.amosley.signal.core.VideoNames.norm(it.title) }.toMutableMap()
+        val extra = mutableListOf<Show>()
+        for (ps in phone) {
+            val key = com.amosley.signal.core.VideoNames.norm(ps.title)
+            val target = byKey[key]
+            if (target == null) { extra += ps; continue }
+            // Point matching PC episodes at the phone file; add phone-only episodes to their season.
+            val seasons = target.seasons.associateBy { it.number }.toMutableMap()
+            for (se in ps.seasons) for (ep in se.episodes) {
+                val season = seasons[se.number] ?: Season(se.number)
+                val i = season.episodes.indexOfFirst { it.episode == ep.episode }
+                val eps = season.episodes.toMutableList()
+                if (i >= 0) eps[i] = eps[i].copy(uri = ep.uri) else eps += ep
+                seasons[se.number] = season.copy(episodes = eps.sortedBy { it.episode })
+            }
+            byKey[key] = target.copy(seasons = seasons.values.sortedBy { it.number })
+        }
+        val merged = pc.map { byKey[com.amosley.signal.core.VideoNames.norm(it.title)] ?: it }
+        return merged + extra
     }
 }

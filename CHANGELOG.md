@@ -3,6 +3,29 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.6] - 2026-09-30
+
+### Favorites
+- Tap the **♥** next to the song title on Now Playing, or use **⋯ → Add to Favorites** on any song.
+- A **Favorites** playlist at the top of Playlists collects every favorite song automatically. Favorites show a small ♥ in song lists.
+
+### Continue watching, Up next, Recently added (like Plex)
+- **Movies** and **TV Shows** now open with:
+  - **Continue watching:** what you stopped part-way through, with how much time is left.
+  - **Up next** (TV): the next episode after the last one you finished. If you've caught up on a show and a new episode is added, it appears here, and the show moves to the front of the row.
+  - **Recently added:** the newest movies, and the newest episode of each show, marked "NEW".
+- An episode counts as watched once you reach the credits (90 % in, the same rule Plex uses).
+- Where you are in a movie or episode is saved on the phone right away, and synced to the PC and Plex when it's reachable.
+- A show's **Continue** button now follows the same rules.
+
+### Movies and shows stored on the phone
+- Videos on the phone now get a proper title and year from release-style file names.
+  For example, `Minions.and.Monsters.2026.2160p.WEB-DL…` becomes **Minions and Monsters · 2026**.
+- If the same movie or show is in your PC's Plex library, Signal shows Plex's poster, summary, cast and ratings
+  while still playing the file from your phone. Your progress syncs back to Plex.
+- Phone episodes named like `Show.S01E04…` join the matching show and season from Plex.
+- "Fix match" no longer appears for phone files. If a title isn't in your Plex library, the page says so.
+
 ## [1.0.5] - 2026-09-30
 
 ### Signal Agent on the PC runs quietly in the tray

@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -242,6 +243,7 @@ fun SongRow(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
     trailingText: String? = null,
+    favorite: Boolean = false,
 ) {
     Row(
         modifier
@@ -272,6 +274,10 @@ fun SongRow(
                     )
                 }
                 Spacer(Modifier.width(8.dp))
+                if (favorite) {
+                    Icon(Icons.Filled.Favorite, "Favorite", tint = C.Amber, modifier = Modifier.size(12.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
                 SourceDot(t.origin, dl)
             }
         }

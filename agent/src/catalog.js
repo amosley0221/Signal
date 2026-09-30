@@ -306,7 +306,8 @@ export class Catalog {
       viewOffsetMs = local.watched ? 0 : local.positionMs;
       watched = local.watched;
     }
-    return { viewOffsetMs: Math.max(0, Math.round(viewOffsetMs || 0)), watched };
+    const lastViewedAt = Math.max(local?.updatedAt || 0, plexInfo?.lastViewedAt || 0) || null;
+    return { viewOffsetMs: Math.max(0, Math.round(viewOffsetMs || 0)), watched, lastViewedAt };
   }
 
   build() {
@@ -414,7 +415,7 @@ export class Catalog {
             summary: p?.summary || null,
             durationMs: m.durationMs || p?.durationMs || null,
             ...this.#progressFor(id, p),
-            size: e.size, container: containerFor(fileName),
+            size: e.size, container: containerFor(fileName), addedAt: e.addedAt,
             width: m.width || null, height: m.height || null,
             thumbUrl: p?.thumb || e.side?.art?.thumb ? `/api/art/${id}?kind=thumb` : null,
             subtitles: (e.side?.subs || []).map((s) => ({ id: s.id, language: s.language, label: s.label, format: s.file.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt', url: `/api/subtitle/${id}/${s.id}` })),
@@ -492,6 +493,7 @@ export class Catalog {
         backdropUrl: p?.art || sh.sideArt.backdrop ? `/api/art/${sh.id}?kind=backdrop` : null,
         matchedBy: p ? p.matchedBy : 'FILENAME',
         seasons: [...seasons.entries()].sort((a, b) => a[0] - b[0]).map(([number, episodes]) => ({ number, episodes })),
+        addedAt: Math.max(0, ...sh.eps.map((x) => x.addedAt || 0)) || null,
       };
       shows.push(show);
       index.set(sh.id, { type: 'show', lib: sh.lib, abs: sh.folder ? path.join(sh.lib.path, sh.folder) : null, item: show, plex: p, sideArt: sh.sideArt });

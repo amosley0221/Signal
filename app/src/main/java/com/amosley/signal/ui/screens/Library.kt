@@ -53,6 +53,10 @@ import com.amosley.signal.core.Show
 import com.amosley.signal.core.SortPref
 import com.amosley.signal.core.SortTab
 import com.amosley.signal.core.Sorting
+import com.amosley.signal.core.WatchItem
+import com.amosley.signal.core.Watching
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
 import com.amosley.signal.core.Track
 import com.amosley.signal.data.DlState
 import com.amosley.signal.ui.Ctx
@@ -212,6 +216,7 @@ fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
             onPlay = { c.st.playFrom(c.app, list, t) },
             onArtist = { c.st.openArtist(it) },
             onMore = { c.st.sheet = Sheet.Actions(t.id) },
+            favorite = c.isFavorite(t.id),
         )
     }
 }
@@ -365,6 +370,10 @@ private fun LazyListScope.playlists(c: Ctx) {
             Text("New playlist", style = T.row)
         }
     }
+    item {
+        val favs = c.lib.tracks.filter { c.isFavorite(it.id) }
+        PlaylistRow(c, "Favorites", "${favs.size} song${if (favs.size != 1) "s" else ""} · tap ♥ on any song", Screen.FAVORITES, favs.firstOrNull())
+    }
     val user = c.playlists
     items(user, key = { "pl-${it.id}" }) { pl ->
         val first = pl.trackIds.firstNotNullOfOrNull { c.track(it) }
@@ -446,7 +455,12 @@ private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, c
 
 private fun LazyListScope.movies(c: Ctx) {
     val list: List<Movie> = Sorting.movies(c.lib.movies, sortPref(c, SortTab.MOVIES))
-    item { SortBar(c, SortTab.MOVIES, Modifier.padding(top = 10.dp)) }
+    val cont = Watching.continueWatching(c.lib.movies, emptyList())
+    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    val recent = Watching.recentMovies(c.lib.movies)
+    if (recent.isNotEmpty() && list.size > 6) item { RecentMoviesRow(c, recent) }
+    item { SectionLabel("All movies", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+    item { SortBar(c, SortTab.MOVIES) }
     if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val mv = list[i]
@@ -466,7 +480,14 @@ private fun LazyListScope.movies(c: Ctx) {
 
 private fun LazyListScope.shows(c: Ctx) {
     val list: List<Show> = Sorting.shows(c.lib.shows, sortPref(c, SortTab.SHOWS))
-    item { SortBar(c, SortTab.SHOWS, Modifier.padding(top = 10.dp)) }
+    val cont = Watching.continueWatching(emptyList(), c.lib.shows)
+    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    val next = Watching.upNext(c.lib.shows)
+    if (next.isNotEmpty()) item { WatchRow(c, "Up next", next) }
+    val recent = Watching.recentEpisodes(c.lib.shows)
+    if (recent.isNotEmpty()) item { WatchRow(c, "Recently added", recent, recentStyle = true) }
+    item { SectionLabel("All shows", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+    item { SortBar(c, SortTab.SHOWS) }
     if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val sh = list[i]
@@ -479,6 +500,78 @@ private fun LazyListScope.shows(c: Ctx) {
             Spacer(Modifier.height(6.dp))
             Text(sh.title, style = T.ui(13.sp, 600), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${sh.seasons.size} season${if (sh.seasons.size != 1) "s" else ""}", style = T.ui(12.sp), color = C.Muted)
+        }
+    }
+}
+
+/** A Plex-style horizontal row of 16:9 cards (Continue watching / Up next / Recently added). */
+@Composable
+private fun WatchRow(c: Ctx, title: String, cards: List<WatchItem>, recentStyle: Boolean = false) {
+    Column(Modifier.padding(top = 14.dp)) {
+        Mono(title, color = C.Muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(cards, key = { "$title-${it.id}" }) { w -> WatchCard(c, w, recentStyle) }
+        }
+    }
+}
+
+@Composable
+private fun WatchCard(c: Ctx, w: WatchItem, recentStyle: Boolean) {
+    val ep = w.episode
+    val show = w.show
+    val mv = w.movie
+    val art: Any? = when {
+        ep != null -> (ep.thumbUrl ?: show?.backdropUrl)?.let { c.repo.remoteUrl(it) }
+        else -> (mv?.backdropUrl ?: mv?.posterUrl)?.let { c.repo.remoteUrl(it) }
+    }
+    val heading = show?.title ?: mv?.title ?: ""
+    val left = (w.durationMs - w.offsetMs).coerceAtLeast(0)
+    val sub = when {
+        ep != null && recentStyle -> "S${ep.season} · E${ep.episode} · ${ep.title}"
+        ep != null && w.offsetMs > 0 -> "S${ep.season} · E${ep.episode} · ${Fmt.runtime(left)} left"
+        ep != null -> "S${ep.season} · E${ep.episode} · ${ep.title}"
+        mv != null && w.offsetMs > 0 -> "${Fmt.runtime(left)} left"
+        else -> mv?.year?.toString() ?: ""
+    }
+    Column(
+        Modifier.width(220.dp).clickable {
+            if (ep != null) c.st.push(Screen.Video(ep.id, VideoKind.EPISODE, show?.id)) else if (mv != null) c.st.push(Screen.Video(mv.id, VideoKind.MOVIE))
+        },
+    ) {
+        Art(heading + (ep?.id ?: ""), art, Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
+            PlayDisc(34.dp, Modifier.align(Alignment.Center))
+            if (w.offsetMs > 0) {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(Color.Black.copy(alpha = 0.5f))) {
+                    Box(Modifier.fillMaxWidth(w.progress).height(3.dp).background(C.Amber))
+                }
+            }
+            if (recentStyle && ep != null && !ep.watched) {
+                Box(Modifier.align(Alignment.TopStart).padding(6.dp).background(C.Amber).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Text("NEW", style = T.badge, color = C.OnAmber)
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(heading, style = T.ui(13.5.sp, 600), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(sub, style = T.ui(12.sp), color = C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun RecentMoviesRow(c: Ctx, movies: List<Movie>) {
+    Column(Modifier.padding(top = 14.dp)) {
+        Mono("Recently added", color = C.Muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(movies, key = { "rm-${it.id}" }) { mv ->
+                Column(Modifier.width(112.dp).clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
+                    Art(mv.title, mv.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
+                        PosterBadge(c, mv.id, mv.origin, Modifier.align(Alignment.TopEnd).padding(5.dp))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(mv.title, style = T.ui(12.5.sp, 600), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(mv.year?.toString() ?: "", style = T.ui(11.5.sp), color = C.Muted, maxLines = 1)
+                }
+            }
         }
     }
 }

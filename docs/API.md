@@ -55,7 +55,7 @@ Full catalogue. All durations are milliseconds, all times are epoch ms. Optional
     "genres":["Sci-fi"], "director":"A. Director", "synopsis":"…", "cast":["Actor One","Actor Two"],
     "rating":7.9, "certificate":"PG-13", "posterUrl":"/api/art/m1?kind=poster",
     "backdropUrl":"/api/art/m1?kind=backdrop", "matchedBy":"PLEX · TMDB",
-    "viewOffsetMs":2500000, "watched":false, "width":1920, "height":1080, "container":"MKV",
+    "viewOffsetMs":2500000, "watched":false, "lastViewedAt":1790000000000, "width":1920, "height":1080, "container":"MKV",
     "size":4000000000, "addedAt":1790000000000,
     "subtitles":[{"id":"s0","language":"en","label":"English","format":"srt","url":"/api/subtitle/m1/s0"}],
     "chapters":[{"title":"Opening","startMs":0}]
@@ -67,7 +67,7 @@ Full catalogue. All durations are milliseconds, all times are epoch ms. Optional
     "matchedBy":"PLEX · TVDB",
     "seasons":[{"number":1,"episodes":[{
       "id":"e1", "season":1, "episode":1, "title":"Pilot", "summary":"…", "durationMs":2880000,
-      "viewOffsetMs":0, "watched":false, "size":1200000000, "container":"MKV",
+      "viewOffsetMs":0, "watched":false, "lastViewedAt":null, "addedAt":1790000000000, "size":1200000000, "container":"MKV",
       "width":1920, "height":1080, "thumbUrl":"/api/art/e1?kind=thumb", "subtitles":[], "chapters":[]
     }]}]
   }]

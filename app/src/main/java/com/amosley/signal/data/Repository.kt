@@ -15,6 +15,8 @@ import com.amosley.signal.core.Origin
 import com.amosley.signal.core.Show
 import com.amosley.signal.core.Track
 import com.amosley.signal.core.UserPlaylist
+import com.amosley.signal.core.WatchProgress
+import com.amosley.signal.core.Watching
 import com.amosley.signal.core.groupAlbums
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -95,6 +98,8 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     private val librariesStore = JsonStore(File(files, "libraries.json"), ListSerializer(Library.serializer())) { emptyList() }
     private val overridesStore = JsonStore(File(files, "artist-overrides.json"), MapSerializer(String.serializer(), String.serializer())) { emptyMap() }
     private val editsStore = JsonStore(File(files, "track-edits.json"), MapSerializer(String.serializer(), TrackEdit.serializer())) { emptyMap() }
+    private val favoritesStore = JsonStore(File(files, "favorites.json"), SetSerializer(String.serializer())) { emptySet() }
+    private val progressStore = JsonStore(File(files, "watch-progress.json"), MapSerializer(String.serializer(), WatchProgress.serializer())) { emptyMap() }
     private val playlistsStore = JsonStore(File(files, "playlists.json"), ListSerializer(UserPlaylist.serializer())) { emptyList() }
     private val conflictsStore = JsonStore(File(files, "conflicts.json"), ListSerializer(TagConflict.serializer())) { emptyList() }
     private val tagJobsStore = JsonStore(File(files, "tag-jobs.json"), ListSerializer(TagJob.serializer())) { emptyList() }
@@ -110,6 +115,10 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     val overrides: StateFlow<Map<String, String>> = _overrides
     private val _edits = MutableStateFlow(editsStore.load())
     val edits: StateFlow<Map<String, TrackEdit>> = _edits
+    private val _favorites = MutableStateFlow(favoritesStore.load())
+    /** Track ids marked as favourites (heart). */
+    val favorites: StateFlow<Set<String>> = _favorites
+    private val _progress = MutableStateFlow(progressStore.load())
     private val _playlists = MutableStateFlow(playlistsStore.load())
     val playlists: StateFlow<List<UserPlaylist>> = _playlists
     private val _conflicts = MutableStateFlow(conflictsStore.load())
@@ -145,12 +154,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     val library: StateFlow<LibraryView> = combine(
         combine(_catalog, _localTracks, _localVideos) { c, lt, lv -> Triple(c, lt, lv) },
-        _overrides, _settings, downloads.states, _edits,
-    ) { (cat, localTracks, localVideos), overrides, settings, dl, edits ->
-        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits)
+        combine(_overrides, _edits, _progress) { o, e, pr -> Triple(o, e, pr) }, _settings, downloads.states,
+    ) { (cat, localTracks, localVideos), (overrides, edits, progress), settings, dl ->
+        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits, progress)
     }.stateIn(scope, SharingStarted.Eagerly, LibraryView())
 
-    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap()): LibraryView {
+    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap(), progress: Map<String, WatchProgress> = emptyMap()): LibraryView {
         val enabledLibs = s.libModes.keys
         fun libOk(id: String?) = id == null || enabledLibs.isEmpty() || id in enabledLibs
         fun avail(id: String, origin: Origin) = !s.offline || origin == Origin.PHONE || (id in dlKeys && downloads.isDownloaded(id))
@@ -161,11 +170,17 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             .map { t -> edits[t.id]?.apply(t) ?: t }
             .filter { avail(it.id, it.origin) }
         val videos = cat.videos.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.musicVideos
-        val movies = cat.movies.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.movies
-        val shows = cat.shows.filter { libOk(it.libraryId) }.mapNotNull { show ->
-            if (!s.offline) show else show.copy(seasons = show.seasons.map { se -> se.copy(episodes = se.episodes.filter { downloads.isDownloaded(it.id) }) }.filter { it.episodes.isNotEmpty() })
+        // Phone videos that are also in the PC/Plex library show Plex's details but play from the phone.
+        val pcMovies = cat.movies.filter { libOk(it.libraryId) }
+        val movies = PhoneMatch.movies(pcMovies, phone.movies)
+            .filter { it.origin == Origin.PHONE || avail(it.id, Origin.PC) }
+            .map { Watching.applyLocal(it, progress[it.id]) }
+        val shows = PhoneMatch.shows(cat.shows.filter { libOk(it.libraryId) }, phone.shows).map { sh ->
+            sh.copy(seasons = sh.seasons.map { se -> se.copy(episodes = se.episodes.map { Watching.applyLocal(it, progress[it.id]) }) })
+        }.mapNotNull { show ->
+            if (!s.offline) show else show.copy(seasons = show.seasons.map { se -> se.copy(episodes = se.episodes.filter { it.uri.isNotEmpty() || downloads.isDownloaded(it.id) }) }.filter { it.episodes.isNotEmpty() })
                 .takeIf { it.seasons.isNotEmpty() }
-        } + phone.shows
+        }
         val artists = tracks.mapNotNull { it.artist }.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
         return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists)
     }
@@ -603,10 +618,21 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     // ---- Progress / watched ---------------------------------------------------------------------
 
+    fun toggleFavorite(trackId: String): Boolean {
+        val now = trackId !in _favorites.value
+        _favorites.update { if (now) it + trackId else it - trackId }
+        favoritesStore.save(_favorites.value)
+        return now
+    }
+
+    /** Remember where you are in a movie/episode (on the phone right away; on the PC / Plex when reachable). */
     fun reportProgress(id: String, positionMs: Long, durationMs: Long) {
+        val watched = Watching.isWatched(positionMs, durationMs)
+        _progress.update { it + (id to WatchProgress(positionMs, durationMs, watched, System.currentTimeMillis())) }
+        progressStore.save(_progress.value)
+        if (id.startsWith("locv:")) return // phone-only video: nothing to tell the PC
         val p = pc ?: return
         val b = _status.value.baseUrl ?: return
-        val watched = durationMs > 0 && positionMs > durationMs * 0.92
         if (watched) {
             meta = meta.copy(watchedAt = meta.watchedAt + (id to System.currentTimeMillis()))
             metaStore.save(meta)
