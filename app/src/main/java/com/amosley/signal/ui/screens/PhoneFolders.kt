@@ -129,6 +129,10 @@ fun SettingsScreen(c: Ctx) {
                     "Find movie & TV details online",
                     "For videos only on this phone: posters and summaries from Apple TV (movies) and TVmaze (shows). Titles in your PC's Plex library use Plex instead.",
                 ) { Toggle(c.settings.onlineVideoInfo) { v -> c.repo.updateSettings { it.copy(onlineVideoInfo = v) }; if (v) c.repo.enrichPhoneVideos() } }
+                SettingRow(
+                    "Include Plex's Continue Watching",
+                    "Continue Watching and Up Next show what you watch in Signal. Turn this on to also show what's in Plex's Continue Watching row (things you watched on the TV or in the Plex app).",
+                ) { Toggle(c.settings.plexContinueWatching) { v -> c.repo.updateSettings { it.copy(plexContinueWatching = v) } } }
                 Spacer(Modifier.height(16.dp))
                 Mono("Songs on both phone and PC", color = C.Muted)
                 Spacer(Modifier.height(6.dp))

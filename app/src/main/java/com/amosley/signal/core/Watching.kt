@@ -27,14 +27,17 @@ object Watching {
     const val JUST_WATCHED_MS = 24L * 3600_000
 
     /**
-     * Whether a started/next item belongs on the home rows. With Plex ([plexIds] not null) PC items follow Plex's
-     * own Continue Watching row; phone-only items (and PCs without Plex) use the 16-week rule.
+     * Whether a started/next item belongs on the home rows.
+     * - [mine] (ids watched in Signal) not null: only what you watched in Signal, within 16 weeks, plus Plex's own
+     *   Continue Watching row when [plexIds] is given (the "include Plex" setting).
+     * - [mine] null: anything with progress within 16 weeks (older behaviour, used by tests and the show page).
      */
-    private fun onDeck(id: String, fromPc: Boolean, lastViewed: Long?, plexIds: Set<String>?, now: Long, maxAge: Long): Boolean {
+    private fun onDeck(id: String, fromPc: Boolean, lastViewed: Long?, plexIds: Set<String>?, now: Long, maxAge: Long, mine: Set<String>?): Boolean {
         if (maxAge == Long.MAX_VALUE) return true
-        val age = now - (lastViewed ?: 0L)
-        if (plexIds != null && fromPc) return id in plexIds || age < JUST_WATCHED_MS
-        return lastViewed != null && lastViewed > 0 && age < maxAge
+        val recent = lastViewed != null && lastViewed > 0 && now - lastViewed < maxAge
+        if (plexIds != null && fromPc && id in plexIds) return true
+        if (mine != null) return id in mine && recent
+        return recent
     }
 
     fun isWatched(positionMs: Long, durationMs: Long) = durationMs > 0 && positionMs >= durationMs * WATCHED_FRACTION
@@ -46,11 +49,11 @@ object Watching {
         show.seasons.sortedBy { it.number }.flatMap { s -> s.episodes.sortedBy { it.episode } }
 
     /** Movies and episodes you stopped part-way through, most recently watched first. */
-    fun continueWatching(movies: List<Movie>, shows: List<Show>, plexIds: Set<String>? = null, now: Long = System.currentTimeMillis(), maxAge: Long = MAX_AGE_MS): List<WatchItem> {
-        val m = movies.filter { mv -> inProgress(mv.viewOffsetMs, mv.watched) && onDeck(mv.id, mv.origin == Origin.PC, mv.lastViewedAt, plexIds, now, maxAge) }
+    fun continueWatching(movies: List<Movie>, shows: List<Show>, plexIds: Set<String>? = null, now: Long = System.currentTimeMillis(), maxAge: Long = MAX_AGE_MS, mine: Set<String>? = null): List<WatchItem> {
+        val m = movies.filter { mv -> inProgress(mv.viewOffsetMs, mv.watched) && onDeck(mv.id, mv.origin == Origin.PC, mv.lastViewedAt, plexIds, now, maxAge, mine) }
             .map { WatchItem(it, null, null, it.lastViewedAt ?: it.addedAt) }
         val e = shows.flatMap { sh ->
-            episodesInOrder(sh).filter { inProgress(it.viewOffsetMs, it.watched) && onDeck(it.id, it.uri.isEmpty(), it.lastViewedAt, plexIds, now, maxAge) }
+            episodesInOrder(sh).filter { inProgress(it.viewOffsetMs, it.watched) && onDeck(it.id, it.uri.isEmpty(), it.lastViewedAt, plexIds, now, maxAge, mine) }
                 .map { WatchItem(null, sh, it, it.lastViewedAt ?: it.addedAt) }
         }
         return (m + e).sortedByDescending { it.sortKey }
@@ -61,7 +64,7 @@ object Watching {
      * includes a newly added episode after you'd caught up. Shows with an episode in progress are left to
      * Continue Watching. Ordered by most recent activity (watching, or a new episode arriving).
      */
-    fun upNext(shows: List<Show>, plexIds: Set<String>? = null, now: Long = System.currentTimeMillis(), maxAge: Long = MAX_AGE_MS): List<WatchItem> = shows.mapNotNull { sh ->
+    fun upNext(shows: List<Show>, plexIds: Set<String>? = null, now: Long = System.currentTimeMillis(), maxAge: Long = MAX_AGE_MS, mine: Set<String>? = null): List<WatchItem> = shows.mapNotNull { sh ->
         val eps = episodesInOrder(sh)
         if (eps.any { inProgress(it.viewOffsetMs, it.watched) }) return@mapNotNull null
         val lastDone = eps.indexOfLast { it.watched }
@@ -69,7 +72,15 @@ object Watching {
         val next = eps.drop(lastDone + 1).firstOrNull { !it.watched } ?: return@mapNotNull null
         val lastViewed = eps.mapNotNull { it.lastViewedAt }.maxOrNull() ?: 0L
         // A new episode arriving counts as activity too (so a show you'd caught up on comes back).
-        if (!onDeck(next.id, next.uri.isEmpty(), maxOf(lastViewed, next.addedAt), plexIds, now, maxAge)) return@mapNotNull null
+        val activity = maxOf(lastViewed, next.addedAt)
+        val show = when {
+            maxAge == Long.MAX_VALUE -> true
+            plexIds != null && next.uri.isEmpty() && next.id in plexIds -> true
+            // With [mine]: the show counts once you've watched any of its episodes in Signal.
+            mine != null -> eps.any { it.id in mine } && now - activity < maxAge
+            else -> activity > 0 && now - activity < maxAge
+        }
+        if (!show) return@mapNotNull null
         WatchItem(null, sh, next, maxOf(lastViewed, next.addedAt))
     }.sortedByDescending { it.sortKey }
 

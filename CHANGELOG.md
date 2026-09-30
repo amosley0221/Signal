@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.29] - 2026-10-01
+
+### Continue Watching follows what you watch in Signal
+- **Continue Watching** now shows the movies and episodes you started in Signal and didn't finish, from the last 16 weeks. Before, it mostly followed Plex's own row, so a movie you started in Signal could be missing.
+- **Up Next** shows the next episode of shows you've been watching in Signal. That includes a newly added episode after you had caught up.
+- New setting: **Settings → Include Plex's Continue Watching** (off by default). Turn it on to also see what's in Plex's row, such as things you watched on the TV or in the Plex app.
+
 ## [1.0.28] - 2026-10-01
 
 ### Movies and TV from the PC start faster

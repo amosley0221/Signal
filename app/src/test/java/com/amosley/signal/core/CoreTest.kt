@@ -159,11 +159,25 @@ class WatchingTest {
         assertEquals(1, Watching.continueWatching(emptyList(), listOf(sh), now = 17 * week, maxAge = Long.MAX_VALUE).size)
     }
 
+    @Test fun onlyWhatYouWatchedInSignal() {
+        val now = 100L * 24 * 3600_000
+        val movies = listOf(
+            Movie(id = "mine", title = "A", viewOffsetMs = 600_000, lastViewedAt = now - 1000),
+            Movie(id = "plexOnly", title = "B", viewOffsetMs = 600_000, lastViewedAt = now - 1000),
+        )
+        assertEquals(listOf("mine"), Watching.continueWatching(movies, emptyList(), now = now, mine = setOf("mine")).map { it.id })
+        // "Include Plex" adds Plex's own row on top.
+        assertEquals(setOf("mine", "plexOnly"), Watching.continueWatching(movies, emptyList(), plexIds = setOf("plexOnly"), now = now, mine = setOf("mine")).map { it.id }.toSet())
+        val sh = show("s", ep("1", 1, 1, watched = true, viewed = now - 1000), ep("2", 1, 2))
+        assertEquals(0, Watching.upNext(listOf(sh), now = now, mine = emptySet()).size)
+        assertEquals("2", Watching.upNext(listOf(sh), now = now, mine = setOf("1")).single().id)
+    }
+
     @Test fun plexListDecidesForPcItems() {
         val sh = show("a", ep("1", 1, 1, offset = 600_000, viewed = 50), ep("2", 1, 2, offset = 600_000, viewed = 60))
         val now = 100L * 24 * 3600_000
-        // Only episode 1 is in Plex's Continue Watching; episode 2 was last watched long ago.
-        assertEquals(listOf("1"), Watching.continueWatching(emptyList(), listOf(sh), plexIds = setOf("1"), now = now).map { it.id })
+        // Nothing watched in Signal; with "include Plex" on, Plex's row (episode 1) still shows.
+        assertEquals(listOf("1"), Watching.continueWatching(emptyList(), listOf(sh), plexIds = setOf("1"), now = now, mine = emptySet()).map { it.id })
     }
 
     @Test fun watchedAtCredits() {

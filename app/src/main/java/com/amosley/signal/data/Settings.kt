@@ -51,6 +51,8 @@ data class Settings(
     val onlineLyrics: Boolean = true,
     /** Look up posters/summaries online (iTunes, TVmaze) for movies and shows that are only on the phone. */
     val onlineVideoInfo: Boolean = true,
+    /** Also show Plex's own Continue Watching row (off: only what you watch in Signal). */
+    val plexContinueWatching: Boolean = false,
     /** Songs on both the phone and the PC: which copy to show (or both). */
     val duplicates: com.amosley.signal.core.DuplicateMode = com.amosley.signal.core.DuplicateMode.PHONE,
     /** Chosen sort for each library tab. */

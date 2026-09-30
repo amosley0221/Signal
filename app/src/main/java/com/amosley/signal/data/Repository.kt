@@ -68,6 +68,8 @@ data class LibraryView(
     val artistOf: Map<String, String> = emptyMap(),
     /** Plex's Continue Watching row (item ids), or null without Plex. */
     val plexContinue: Set<String>? = null,
+    /** Movies and episodes watched in Signal (they drive Continue Watching and Up Next). */
+    val watchedInSignal: Set<String> = emptySet(),
 ) {
     /** A movie by id, including the extra versions folded under another poster. */
     fun movie(id: String): Movie? = movies.firstOrNull { it.id == id } ?: movies.firstNotNullOfOrNull { m -> m.versions.firstOrNull { it.id == id } }
@@ -209,7 +211,8 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         }
         val artistOf = com.amosley.signal.core.ArtistNames.primary(tracks)
         val artists = artistOf.values.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
-        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists, artistOf, cat.continueWatching?.toSet())
+        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists, artistOf,
+            if (s.plexContinueWatching) cat.continueWatching?.toSet() else null, progress.keys)
     }
 
     fun updateSettings(f: (Settings) -> Settings) {

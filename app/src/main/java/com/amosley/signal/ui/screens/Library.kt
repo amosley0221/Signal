@@ -531,7 +531,7 @@ private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, c
 
 private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
     val list: List<Movie> = Sorting.movies(c.lib.movies, sortPref(c, SortTab.MOVIES))
-    val cont = Watching.continueWatching(c.lib.movies, emptyList(), c.lib.plexContinue)
+    val cont = Watching.continueWatching(c.lib.movies, emptyList(), c.lib.plexContinue, mine = c.lib.watchedInSignal)
     if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
     val recent = Watching.recentMovies(c.lib.movies)
     if (recent.isNotEmpty() && list.size > 6) counted(jump) { RecentMoviesRow(c, recent) }
@@ -558,9 +558,9 @@ private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
 
 private fun LazyListScope.shows(c: Ctx, jump: JumpIndex) {
     val list: List<Show> = Sorting.shows(c.lib.shows, sortPref(c, SortTab.SHOWS))
-    val cont = Watching.continueWatching(emptyList(), c.lib.shows, c.lib.plexContinue)
+    val cont = Watching.continueWatching(emptyList(), c.lib.shows, c.lib.plexContinue, mine = c.lib.watchedInSignal)
     if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
-    val next = Watching.upNext(c.lib.shows, c.lib.plexContinue)
+    val next = Watching.upNext(c.lib.shows, c.lib.plexContinue, mine = c.lib.watchedInSignal)
     if (next.isNotEmpty()) counted(jump) { WatchRow(c, "Up next", next) }
     val recent = Watching.recentEpisodes(c.lib.shows)
     if (recent.isNotEmpty()) counted(jump) { WatchRow(c, "Recently added", recent, recentStyle = true) }
