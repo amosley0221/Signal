@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -620,6 +622,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
             if (!scanning && rooms.isEmpty() && castDevices.isEmpty()) {
                 Mono("No speakers or TVs found on this Wi-Fi", style = T.metaMono, color = C.Faint, modifier = Modifier.padding(vertical = 12.dp))
             }
+            if (!scanning && rooms.isEmpty()) SonosByIp(c)
             if (activeSonos != null) {
                 val names = listOf(activeSonos.room.name) + rooms.filter { it.uuid in c.st.sonosGroup }.map { it.name }
                 Spacer(Modifier.height(14.dp))
@@ -663,4 +666,40 @@ private fun GroupToggle(grouped: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick).padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) { Text(if (grouped) "GROUPED ✓" else "+ GROUP", style = T.mono(10.sp, 600, 0.08.sp), color = if (grouped) C.OnAmber else C.Fg) }
+}
+
+/** No Sonos found: say what was tried, and let the user type a speaker's IP (Sonos app → Settings → System → About My System). */
+@Composable
+private fun SonosByIp(c: Ctx) {
+    val app = c.app
+    val last by app.sonos.lastScan.collectAsState()
+    val scope = rememberCoroutineScope()
+    var ip by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    Column(Modifier.padding(vertical = 12.dp)) {
+        Mono("No Sonos found" + (last?.let { " · $it" } ?: ""), style = T.metaMono, color = C.Faint)
+        Spacer(Modifier.height(6.dp))
+        Text("Add a speaker by its IP address. Find it in the Sonos app under Settings → System → About My System.", style = T.ui(12.5.sp), color = C.Muted)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(
+                ip, { ip = it.filter { ch -> ch.isDigit() || ch == '.' } }, singleLine = true,
+                textStyle = T.ui(15.sp).copy(color = C.Fg), cursorBrush = SolidColor(C.Amber),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f).border(1.dp, C.HairStrong).padding(horizontal = 10.dp, vertical = 9.dp),
+                decorationBox = { inner -> if (ip.isEmpty()) Text("192.168.1.50", style = T.ui(15.sp), color = C.Faint); inner() },
+            )
+            Spacer(Modifier.width(8.dp))
+            OutlineBtn(if (busy) "Adding…" else "Add") {
+                if (busy || ip.isBlank()) return@OutlineBtn
+                busy = true
+                scope.launch {
+                    c.toast(app.sonos.addByIp(ip))
+                    busy = false
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlineBtn("Search again") { app.sonos.discover() }
+    }
 }

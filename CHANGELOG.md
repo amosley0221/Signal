@@ -3,6 +3,14 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.16] - 2026-09-30
+
+### Sonos with Tailscale on
+- Fixed Sonos speakers not being found while Tailscale (or another VPN) is on. Android reports a VPN as a Wi-Fi network too, so the search could run over Tailscale instead of your home Wi-Fi.
+- Each part of the search now runs on its own, so one failing no longer skips the others.
+- If no Sonos speaker is found, **Play on** shows what was searched and lets you add a speaker by its IP address (Sonos app → Settings → System → About My System). Signal remembers it and adds the other rooms in your house automatically.
+- A **Search again** button reruns the search.
+
 ## [1.0.15] - 2026-09-30
 
 ### Downloads make sense now

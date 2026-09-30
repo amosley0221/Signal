@@ -46,14 +46,22 @@ class SonosController(private val context: Context, private val http: OkHttpClie
     val rooms: StateFlow<List<SonosRoom>> = _rooms
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning
+    private val _lastScan = MutableStateFlow<String?>(null)
+    /** What the last search tried, shown when it finds nothing (helps tell a blocked network from no speakers). */
+    val lastScan: StateFlow<String?> = _lastScan
 
     private val prefs = context.getSharedPreferences("sonos", Context.MODE_PRIVATE)
 
     /** The phone's Wi-Fi network. Sockets bound to it bypass a VPN, which otherwise swallows SSDP and LAN traffic. */
     private fun wifiNetwork(): Network? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        // A VPN (e.g. Tailscale) also reports TRANSPORT_WIFI for the network under it, so exclude VPNs explicitly.
         @Suppress("DEPRECATION")
-        return cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+        return cm.allNetworks.firstOrNull {
+            val caps = cm.getNetworkCapabilities(it) ?: return@firstOrNull false
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        }
     }
 
     @Volatile private var lanClient: Pair<Network?, OkHttpClient>? = null
@@ -91,20 +99,31 @@ class SonosController(private val context: Context, private val http: OkHttpClie
                 if (!tried.add(location)) return
                 runCatching { describe(location) }.getOrNull()?.let(::add)
             }
+            var replies = 0
+            var open1400 = 0
+            val wifiIp = runCatching { wifiAddress()?.hostAddress }.getOrNull()
+            // Each step is independent: one failing (e.g. multicast refused) must not skip the others.
             runCatching {
                 coroutineScope {
                     cached().forEach { r -> launch { check("http://${r.ip}:1400/xml/device_description.xml") } }
-                    launch { ssdp { loc -> launch { check(loc) } } }
+                    launch { runCatching { ssdp { loc -> replies++; launch { check(loc) } } } }
                 }
+            }
+            runCatching {
                 // Every room the found ones know about (catches rooms that missed the multicast).
                 synchronized(found) { found.values.toList() }.firstOrNull()?.let { r ->
                     val locs = runCatching { topologyLocations(r) }.getOrDefault(emptyList())
                     coroutineScope { locs.forEach { launch { check(it) } } }
                 }
-                if (synchronized(found) { found.isEmpty() }) {
-                    coroutineScope { subnetHosts().forEach { ip -> launch { if (port1400Open(ip)) check("http://$ip:1400/xml/device_description.xml") } } }
+            }
+            if (synchronized(found) { found.isEmpty() }) runCatching {
+                coroutineScope {
+                    subnetHosts().forEach { ip ->
+                        launch { if (port1400Open(ip)) { synchronized(found) { open1400++ }; check("http://$ip:1400/xml/device_description.xml") } }
+                    }
                 }
             }
+            _lastScan.value = if (wifiIp == null) "Not on Wi-Fi" else "Searched Wi-Fi $wifiIp · $replies Sonos replies · $open1400 found by network check"
             val all = synchronized(found) { found.values.sortedBy { it.name } }
             _rooms.value = all
             if (all.isNotEmpty()) prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
@@ -172,11 +191,32 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         return Regex("Location=(?:&quot;|\")(http://[^&\"]+)").findAll(xml).map { it.groupValues[1] }.distinct().toList()
     }
 
+    private fun wifiAddress(): Inet4Address? {
+        val net = wifiNetwork() ?: return null
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.getLinkProperties(net)?.linkAddresses?.map { it.address }?.filterIsInstance<Inet4Address>()?.firstOrNull()
+    }
+
+    /** Adds a speaker by its IP address (Sonos app → Settings → System → About My System), plus the rest of its household. */
+    suspend fun addByIp(ip: String): String = withContext(Dispatchers.IO) {
+        val host = ip.trim().removePrefix("http://").substringBefore('/').substringBefore(':')
+        val room = runCatching { describe("http://$host:1400/xml/device_description.xml") }.getOrNull()
+            ?: return@withContext "No Sonos speaker answered at $host"
+        val found = LinkedHashMap<String, SonosRoom>()
+        _rooms.value.forEach { found[it.uuid] = it }
+        found[room.uuid] = room
+        runCatching { topologyLocations(room) }.getOrDefault(emptyList()).forEach { loc ->
+            runCatching { describe(loc) }.getOrNull()?.let { found[it.uuid] = it }
+        }
+        val all = found.values.sortedBy { it.name }
+        _rooms.value = all
+        prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
+        "Added ${all.size} Sonos room${if (all.size != 1) "s" else ""}"
+    }
+
     /** Other addresses on the phone's Wi-Fi subnet (at most a /24 around the phone). */
     private fun subnetHosts(): List<String> {
-        val net = wifiNetwork() ?: return emptyList()
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val own = cm.getLinkProperties(net)?.linkAddresses?.map { it.address }?.filterIsInstance<Inet4Address>()?.firstOrNull() ?: return emptyList()
+        val own = wifiAddress() ?: return emptyList()
         val b = own.address.map { it.toInt() and 0xff }
         return (1..254).filter { it != b[3] }.map { "${b[0]}.${b[1]}.${b[2]}.$it" }
     }
