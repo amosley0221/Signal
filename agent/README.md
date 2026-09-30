@@ -1,5 +1,33 @@
 # Signal Agent (PC)
 
+## Easy setup (Windows)
+
+No installing Node.js, no command line, no settings files.
+
+1. **Download** `SignalAgent.exe` from the Signal releases page:
+   <https://github.com/amosley0221/Signal/releases/latest> (under *Assets*). Put it somewhere it can
+   stay, for example your *Documents* folder.
+2. **Double-click `SignalAgent.exe`.**
+   - If Windows says **"Windows protected your PC"** (SmartScreen), click **More info**, then
+     **Run anyway**. This appears because the program isn't signed with a paid certificate.
+   - When **Windows Firewall** asks whether to allow Signal Agent, tick **Private networks** and click
+     **Allow**. Without this your phone can't reach the PC.
+3. **The setup page opens in your browser** (<http://localhost:8765/>). Click **+ Add a folder**, pick
+   your music or video folder, choose what's in it (Music, Music videos, Movies or TV shows), add any
+   other folders, then click **Save**. The agent starts scanning straight away.
+4. **Turn on "Start with Windows"** on the same page, so the agent runs in the background every time
+   you sign in. Otherwise keep the black Signal Agent window open while you use the app.
+5. **Pair your phone.** In Signal Player, open *Sync → Pair with a PC*. The PC is usually found by
+   itself; if not, type one of the addresses shown on the setup page under *Connect your phone*.
+   Your phone shows a 6-digit code, and the same code appears on the setup page: click **Approve**.
+
+To open the setup page again later, double-click `SignalAgent.exe` again (if it's already running, it
+just opens the page), or go to <http://localhost:8765/> on the PC. Settings and data are stored in
+`%APPDATA%\SignalAgent\` (`signal-agent.config.json` and `data\`). To update, download the new
+`SignalAgent.exe` and replace the old one (turn *Start with Windows* off and on again if you moved it).
+
+---
+
 A small Node.js server that runs on your Windows PC and serves your music, music-video, movie and TV
 folders to the **Signal Player** Android app. It implements the HTTP contract in
 [`../docs/API.md`](../docs/API.md): catalogue, Range streaming, downloads (optional 16-bit/44.1 kHz
@@ -13,7 +41,9 @@ uploads, watched state (forwarded to Plex) and a job list for the app's Sync act
   resolution/HDR/chapters). Everything works without them. See [Without ffmpeg](#without-ffmpeg).
 - Optional **Plex**: enriches movies and TV with Plex metadata and artwork, and syncs watched state.
 
-## Setup
+## Running from source
+
+For developers, or if you prefer running it with Node.js yourself.
 
 1. **Install Node.js LTS** (20 or newer) from <https://nodejs.org/>. Accept the defaults, which put
    `node` and `npm` on your PATH.
@@ -21,14 +51,16 @@ uploads, watched state (forwarded to Plex) and a job list for the app's Sync act
    ```powershell
    npm install
    ```
-3. **Create the config.** Run `npm start` once. This creates `signal-agent.config.json` in this
-   folder. Stop the agent with Ctrl+C, then edit the file. The fields are described under
-   [Configuration](#configuration). `signal-agent.config.example.json` is a filled-in example.
-4. **Start the agent:**
+3. **Start the agent:**
    ```powershell
    npm start
    ```
-   The first scan runs straight away. You can follow its progress on the admin page.
+   This creates `signal-agent.config.json` in this folder on the first run. Open
+   **<http://localhost:8765/>** to add your folders (or edit the file — the fields are described under
+   [Configuration](#configuration), and `signal-agent.config.example.json` is a filled-in example).
+   Scans run straight away. Add `--open-browser` to open the page automatically.
+4. **Start with Windows (simple).** The *Start with Windows* switch on the admin page also works when
+   running from source: it starts `node src\index.js` hidden at sign-in.
 5. **Pair your phone.** In Signal Player, open *Sync → Pair with a PC*. The agent is found
    automatically over mDNS, or you can type `192.168.x.y:8765`. The phone shows a 6-digit code. You
    can approve it in either place:
@@ -40,7 +72,7 @@ uploads, watched state (forwarded to Plex) and a job list for the app's Sync act
    ```powershell
    netsh advfirewall firewall add rule name="Signal Agent" dir=in action=allow protocol=TCP localport=8765
    ```
-7. **Start the agent at logon (optional).** Run this in an **elevated** PowerShell in this folder:
+7. **Start the agent at logon as a Scheduled Task (alternative to step 4).** Run this in an **elevated** PowerShell in this folder:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install-startup.ps1
    ```
@@ -63,9 +95,15 @@ also covers the Tailscale adapter.
 
 ## Configuration
 
-`signal-agent.config.json` is created with defaults on the first run. By default it lives next to the
-`data` directory in this folder. To use another file, pass `--config <file>` or set the
-`SIGNAL_AGENT_CONFIG` environment variable.
+`signal-agent.config.json` is created with defaults on the first run, and the admin page's
+*Settings* section edits `name`, `libraries` and `plex` for you (saving applies them straight away and
+rescans; `port`, `host` and `dataDir` need a restart). By default it lives next to the `data`
+directory in this folder; for `SignalAgent.exe` it is `%APPDATA%\SignalAgent\signal-agent.config.json`
+(`~/.config/signal-agent/` for the Linux/macOS executables). To use another file, pass
+`--config <file>` or set the `SIGNAL_AGENT_CONFIG` environment variable.
+
+Command-line flags: `--config <file>`, `--no-browser` (the executable opens the setup page on start
+unless this is given; the *Start with Windows* launcher passes it), `--open-browser` (from source).
 
 ```json
 {
@@ -151,7 +189,14 @@ When run in a terminal, the agent accepts these commands:
 npm install
 npm test          # node --test: LRC parsing, Range parsing, suggester, filename parsing, HTTP integration, mocked Plex
 npm start -- --config /path/to/test-config.json
+npm run build:exe # single executable → dist/SignalAgent.exe (Windows) or dist/signal-agent
 ```
+
+`npm run build:exe` (`scripts/build-exe.mjs`) bundles `src/index.js` and all dependencies into
+`dist/signal-agent.cjs` with esbuild, turns it into a [Node single executable application](https://nodejs.org/api/single-executable-applications.html)
+(copy of the running `node` binary + injected blob via postject), and smoke-tests both the bundle and
+the executable (`GET /api/info`). The executable only runs on the OS/CPU it was built on, so the
+Windows `.exe` is built on a Windows machine or `windows-latest` CI runner with Node 22.
 
 Source layout (`src/`):
 
@@ -170,7 +215,8 @@ Source layout (`src/`):
 | `state.js` | Tokens, pairing, overrides |
 | `activity.js` | Job list |
 | `tags.js` | Tag writes |
-| `admin.js` | Admin page |
+| `admin.js` | Admin page (setup form, folder picker, pairing) |
+| `desktop.js` | Open browser, Start with Windows launcher, folder listing |
 
 Security notes:
 
@@ -178,3 +224,6 @@ Security notes:
 - The admin page and its `/admin/*` endpoints only answer requests from `127.0.0.1` or `::1` with a
   `localhost` Host header.
 - The admin actions also require an `X-Signal-Admin` header, which blocks cross-site form posts.
+- The setup page's folder picker (`GET /admin/browse`) also requires the `X-Signal-Admin` header, so
+  other web pages can't list your folders. Saving settings (`POST /admin/setup`) validates every folder
+  before writing the config file.

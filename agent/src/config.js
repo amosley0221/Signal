@@ -15,7 +15,7 @@ export const LIBRARY_TYPES = ['music', 'musicvideos', 'movies', 'tv'];
  */
 export function isPackagedRuntime({ isSea = null, execPath = process.execPath } = {}) {
   if (typeof isSea === 'boolean') return isSea;
-  const base = path.basename(String(execPath || '')).toLowerCase().replace(/\.exe$/, '');
+  const base = String(execPath || '').split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
   return !/^(node|nodejs|node\d+)$/.test(base);
 }
 
