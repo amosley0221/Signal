@@ -402,6 +402,18 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     private fun base(): String? = _status.value.baseUrl ?: pc?.lanUrl
 
+    /**
+     * URL for a speaker or TV to fetch from the PC: always the PC's home-network address. The phone itself may be
+     * reaching the PC over Tailscale (100.x), which Sonos and Chromecast can't use.
+     */
+    fun speakerUrl(path: String): String? {
+        val p = pc ?: return null
+        return AgentClient.mediaUrl(p.lanUrl, p.token, path)
+    }
+    fun speakerStreamUrl(id: String): String? = speakerUrl("/api/stream/$id")
+    fun speakerArtUrl(id: String): String? = speakerUrl("/api/art/$id?kind=cover")
+    fun speakerTranscodedUrl(id: String): String? = speakerUrl("/api/download/$id?quality=16-44")
+
     fun remoteUrl(path: String): String? {
         if (path.startsWith("http://") || path.startsWith("https://")) return path
         val p = pc ?: return null

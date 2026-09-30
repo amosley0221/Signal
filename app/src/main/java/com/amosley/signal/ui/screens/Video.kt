@@ -355,7 +355,7 @@ private fun resolve(c: Ctx, s: Screen.Video): VideoSource? {
     return when (s.kind) {
         VideoKind.MOVIE -> c.lib.movie(s.id)?.let { m: Movie ->
             VideoSource(m.id, m.title, listOfNotNull(m.year?.toString(), m.certificate).joinToString(" · "), uri(m.id, m.origin, m.uri),
-                if (m.origin == Origin.PC) c.repo.streamUrl(m.id) else null, if (m.watched) 0 else m.viewOffsetMs, m.durationMs, m.subtitles, m.chapters, m.width, m.height, m.origin, null)
+                if (m.origin == Origin.PC) c.repo.speakerStreamUrl(m.id) else null, if (m.watched) 0 else m.viewOffsetMs, m.durationMs, m.subtitles, m.chapters, m.width, m.height, m.origin, null)
         }
         VideoKind.EPISODE -> {
             val show = c.lib.shows.firstOrNull { it.id == s.showId } ?: c.lib.shows.firstOrNull { sh -> sh.allEpisodes.any { it.id == s.id } }
@@ -365,11 +365,11 @@ private fun resolve(c: Ctx, s: Screen.Video): VideoSource? {
             val nxt = eps.getOrNull(i + 1)?.let { Screen.Video(it.id, VideoKind.EPISODE, show!!.id) }
             val epOrigin = if (ep.uri.isNotEmpty()) Origin.PHONE else Origin.PC
             VideoSource(ep.id, "${show!!.title} · S${ep.season}E${ep.episode} ${ep.title}", Fmt.runtime(ep.durationMs), uri(ep.id, epOrigin, ep.uri),
-                if (epOrigin == Origin.PC) c.repo.streamUrl(ep.id) else null, if (ep.watched) 0 else ep.viewOffsetMs, ep.durationMs, ep.subtitles, ep.chapters, ep.width, ep.height, epOrigin, nxt)
+                if (epOrigin == Origin.PC) c.repo.speakerStreamUrl(ep.id) else null, if (ep.watched) 0 else ep.viewOffsetMs, ep.durationMs, ep.subtitles, ep.chapters, ep.width, ep.height, epOrigin, nxt)
         }
         VideoKind.MUSIC_VIDEO -> c.lib.videos.firstOrNull { it.id == s.id }?.let { v ->
             VideoSource(v.id, v.title, listOfNotNull(v.artist, v.album).joinToString(" · "), uri(v.id, v.origin, v.uri),
-                if (v.origin == Origin.PC) c.repo.streamUrl(v.id) else null, 0, v.durationMs,
+                if (v.origin == Origin.PC) c.repo.speakerStreamUrl(v.id) else null, 0, v.durationMs,
                 emptyList(), emptyList(), v.width, v.height, v.origin, null)
         }
     }

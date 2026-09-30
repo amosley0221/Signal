@@ -403,7 +403,7 @@ class SonosOutput(
                 // Only count real playback (TRANSITIONING also happens when the speaker fails to load the file).
                 if (st == "PLAYING" && pos > 0) sawPlaying = true
                 val d = if (dur > 0) dur else expectedDuration
-                if (st == "STOPPED" && !sawPlaying && loadedAt > 0 && System.currentTimeMillis() - loadedAt > 4_000) {
+                if (st == "STOPPED" && !sawPlaying && loadedAt > 0 && System.currentTimeMillis() - loadedAt > 10_000) {
                     // Stopped without ever playing: the speaker couldn't fetch the song. Stop here instead of skipping through the queue.
                     loadedAt = 0
                     _state.value = RemoteState(positionMs = 0, durationMs = d, playing = false, error = "${room.name} couldn't load this song")

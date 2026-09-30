@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.37] - 2026-10-01
+
+### More reliable Sonos and Cast
+- Fixed Sonos (and TVs) sometimes failing with "couldn't load this song". When the phone reached the PC over Tailscale (for example, because the PC was slow to answer at home), the speaker was given the PC's Tailscale address, which speakers can't reach. Speakers and TVs now always get the PC's home-network address.
+- A speaker now has 10 seconds instead of 4 to start a song before Signal reports that it couldn't load it, so slower starts aren't cut off.
+
 ## [1.0.36] - 2026-10-01
 
 - **Music › Recently Added** now shows large album covers, like the Albums tab, instead of a song-by-song list. Each album appears once, newest first, under "Added this week" and "Earlier". Songs without an album get their own tile marked **Single**; tap it to play. This works folded and unfolded, with more tiles per row on the wider screen.

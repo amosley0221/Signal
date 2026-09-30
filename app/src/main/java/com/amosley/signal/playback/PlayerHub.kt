@@ -340,8 +340,8 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         val pcUp = t.origin == Origin.PC && repo.status.value.reachable && !repo.settings.value.offline
         if (pcUp) {
             val transcode = forSonos && hiRes
-            val url = (if (transcode) repo.transcodedUrl(t.id) else repo.streamUrl(t.id)) ?: return null
-            return RemoteItem(url, t.title, t.artist, t.album, if (t.hasArt) repo.artUrl(t.id) else null, if (transcode) "audio/flac" else mimeOf(t.container), t.durationMs)
+            val url = (if (transcode) repo.speakerTranscodedUrl(t.id) else repo.speakerStreamUrl(t.id)) ?: return null
+            return RemoteItem(url, t.title, t.artist, t.album, if (t.hasArt) repo.speakerArtUrl(t.id) else null, if (transcode) "audio/flac" else mimeOf(t.container), t.durationMs)
         }
         val file = repo.downloads.fileFor(t.id)
         val uri = when {
