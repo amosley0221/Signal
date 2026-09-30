@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { loadConfig, resolveConfigPath, normalizeConfig, isPackaged } from './config.js';
 import { Agent, VERSION } from './agent.js';
@@ -94,6 +95,15 @@ async function fatal(msg) {
     });
   }
   process.exit(1);
+}
+
+/** Errors from a dropped connection (a phone that stopped a video, lost Wi-Fi…): log them, keep serving. */
+const CONNECTION_ERRORS = new Set(['EPIPE', 'ECONNRESET', 'ECONNABORTED', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END']);
+export const isConnectionError = (e) => CONNECTION_ERRORS.has(e?.code);
+
+/** Restart after a crash unless it already crashed 3 times in the last 10 minutes (no restart loops). */
+export function shouldRestart(crashTimes, now = Date.now()) {
+  return crashTimes.filter((t) => now - t < 10 * 60 * 1000).length < 3;
 }
 
 /** Is a Signal Agent already answering on this port? Returns its /api/info or null. */
@@ -192,7 +202,30 @@ export async function main(argv = process.argv.slice(2)) {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  process.on('uncaughtException', (e) => { agent.log(`[agent] uncaught: ${e.stack || e}`); process.exit(1); });
+  process.on('uncaughtException', (e) => {
+    agent.log(`[agent] uncaught: ${e?.stack || e}`);
+    if (isConnectionError(e)) return;
+    // Anything else: note it, start a fresh copy (packaged exe) and exit, so the phone reconnects on its own.
+    const crashFile = path.join(config.dataDir, 'crashes.json');
+    let times = [];
+    try { times = JSON.parse(fs.readFileSync(crashFile, 'utf8')); } catch { /* none yet */ }
+    const now = Date.now();
+    const restart = packaged && shouldRestart(times, now);
+    try {
+      fs.writeFileSync(crashFile, JSON.stringify([...times.filter((t) => now - t < 24 * 3600 * 1000), now]));
+      fs.writeFileSync(path.join(config.dataDir, 'last-crash.txt'), `${new Date(now).toISOString()}\n${e?.stack || e}\n`);
+    } catch { /* best effort */ }
+    if (restart) {
+      agent.log('[agent] restarting after the error above');
+      try {
+        const args = argv.filter((a) => a !== '--updated');
+        spawn(process.execPath, [...args, '--updated', '--no-browser'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      } catch (err) {
+        agent.log(`[agent] could not restart: ${err.message}`);
+      }
+    }
+    process.exit(1);
+  });
   process.on('unhandledRejection', (e) => agent.log(`[agent] unhandled rejection: ${e?.stack || e}`));
 }
 

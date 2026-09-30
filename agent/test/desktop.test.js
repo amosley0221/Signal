@@ -180,3 +180,14 @@ describe('admin quit + tray state', () => {
     await assert.rejects(fetch(`http://127.0.0.1:${port}/api/info`));
   });
 });
+
+test('crash handling: dropped connections are ignored, restarts are capped', async () => {
+  const { isConnectionError, shouldRestart } = await import('../src/index.js');
+  assert.equal(isConnectionError(Object.assign(new Error('x'), { code: 'ECONNRESET' })), true);
+  assert.equal(isConnectionError(new Error('boom')), false);
+  const now = 1_000_000_000;
+  assert.equal(shouldRestart([], now), true);
+  assert.equal(shouldRestart([now - 1000, now - 2000], now), true);
+  assert.equal(shouldRestart([now - 1000, now - 2000, now - 3000], now), false);
+  assert.equal(shouldRestart([now - 3600_000, now - 3700_000, now - 3800_000], now), true);
+});

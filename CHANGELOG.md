@@ -3,6 +3,14 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.30] - 2026-10-01
+
+### Signal Agent restarts itself instead of staying closed
+- **Signal Agent (PC):** if something unexpected goes wrong, the agent now starts a fresh copy of itself within a few seconds, and the phone reconnects on its own. Before, it simply closed and stayed closed until you started it again.
+- A dropped connection, such as switching videos while one is still loading or the phone leaving Wi-Fi, is no longer treated as a fatal error.
+- To avoid a restart loop, the agent stops restarting itself after 3 crashes within 10 minutes.
+- Each crash is written to `last-crash.txt` and `agent.log` in `%APPDATA%\SignalAgent`, so the cause can be found and fixed.
+
 ## [1.0.29] - 2026-10-01
 
 ### Continue Watching follows what you watch in Signal
