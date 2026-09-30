@@ -588,7 +588,15 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     /** Save edited tags (title, album, genre, …). Kept on the phone; written into PC files by the agent. */
-    fun editTrack(track: Track, edit: TrackEdit) {
+    fun editTrack(track: Track, requested: TrackEdit) {
+        var edit = requested
+        // Giving a song the name of an album that already has an album artist (e.g. a soundtrack combined into
+        // one album) joins that album, so it gets the same cover instead of starting a new album.
+        val prev = _edits.value[track.id]
+        val album = edit.album ?: prev?.album ?: track.album
+        if (edit.albumArtist == null && (prev?.albumArtist ?: track.albumArtist) == null && album != null) {
+            albumArtistFor(album, track.id)?.let { edit = edit.copy(albumArtist = it) }
+        }
         edit.artist?.let { a -> _overrides.update { it + (track.id to a) }; overridesStore.save(_overrides.value); onlineMisses -= track.id }
         _edits.update { all -> all + (track.id to (all[track.id]?.merge(edit) ?: edit)) }
         editsStore.save(_edits.value)
@@ -601,6 +609,28 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             tagJobsStore.save(_tagJobs.value)
             scope.launch { flushTagJobs() }
         }
+    }
+
+    /** The album artist already used by other songs of the album called [album], if there is exactly one. */
+    private fun albumArtistFor(album: String, exceptId: String): String? =
+        library.value.tracks.filter { it.id != exceptId && it.album?.trim().equals(album.trim(), ignoreCase = true) }
+            .mapNotNull { it.albumArtist?.takeIf { a -> a.isNotBlank() } }.distinctBy { it.lowercase() }.singleOrNull()
+
+    /**
+     * Albums with the same title listed under different artists (a soundtrack, a compilation): give every song the
+     * same album artist so they show as one album. The first custom cover found is kept for the combined album.
+     */
+    fun combineAlbums(albums: List<com.amosley.signal.core.Album>, albumArtist: String) {
+        val name = albumArtist.trim().ifEmpty { return }
+        val first = albums.firstOrNull() ?: return
+        val newKey = com.amosley.signal.core.albumKeyOf(first.title, name)
+        if (albumArtFile(newKey) == null) {
+            albums.firstNotNullOfOrNull { albumArtFile(it.key) }?.let { src ->
+                val dest = artFile("album", newKey)
+                runCatching { src.copyTo(dest, overwrite = true) }.onSuccess { artNames += dest.name; _artVersion.update { it + 1 } }
+            }
+        }
+        albums.flatMap { it.tracks }.filter { it.albumArtist != name }.forEach { editTrack(it, TrackEdit(albumArtist = name)) }
     }
 
     // ---- Custom art (albums and artists) --------------------------------------------------------

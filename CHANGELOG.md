@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.25] - 2026-10-01
+
+### Combine soundtracks and compilations into one album
+- When other albums have the same name under different artists (a soundtrack like "Vacancy: The Soundtrack"), the album page now offers **Combine**. It gives every song the same album artist ("Various Artists", or any name you type) so they show as one album. The album art you already applied is kept for the combined album.
+- For songs on the PC, the album artist is also written into the files, so Plex and other players group them the same way.
+- **Adding more songs later:** when you give a song an album name that already has an album artist, the song joins that album automatically and gets its cover. You don't need to fill in the album artist yourself.
+
 ## [1.0.24] - 2026-09-30
 
 ### Sonos grouping no longer crashes the app

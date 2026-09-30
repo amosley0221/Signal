@@ -41,6 +41,13 @@ import androidx.compose.ui.unit.sp
 import com.amosley.signal.core.Fmt
 import com.amosley.signal.core.MusicVideo
 import com.amosley.signal.core.Origin
+import com.amosley.signal.ui.components.OutlineBtn
+import com.amosley.signal.ui.components.CardBox
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.border
 import com.amosley.signal.core.Track
 import com.amosley.signal.data.DlState
 import com.amosley.signal.ui.Ctx
@@ -240,6 +247,9 @@ fun AlbumScreen(c: Ctx, key: String) {
                 onChangeArt = { c.st.sheet = Sheet.Art(album = album.key, artist = null) },
             )
         }
+        // Same album title under other artists (a soundtrack or compilation): offer to combine them.
+        val sameTitle = if (album.title == "Singles") emptyList() else c.lib.albums.filter { it.key != album.key && it.title.trim().equals(album.title.trim(), ignoreCase = true) }
+        if (sameTitle.isNotEmpty()) item { CombineAlbumsCard(c, album, sameTitle) }
         item { Spacer(Modifier.height(10.dp)) }
         itemsIndexed(tracks, key = { _, t -> "at-${t.id}" }) { i, t -> TrackRowNumbered(c, t, i, tracks) }
         if (album.videos.isNotEmpty()) {
@@ -334,5 +344,42 @@ fun Missing(c: Ctx) {
         BackButton(c)
         Spacer(Modifier.height(20.dp))
         Mono("Not available", color = C.Faint)
+    }
+}
+
+/** "3 more albums are called Vacancy: The Soundtrack" → combine them under one album artist. */
+@Composable
+private fun CombineAlbumsCard(c: Ctx, album: com.amosley.signal.core.Album, others: List<com.amosley.signal.core.Album>) {
+    var name by remember(album.key) { mutableStateOf(album.tracks.firstNotNullOfOrNull { it.albumArtist } ?: "Various Artists") }
+    Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp)) {
+        CardBox {
+            Column {
+                val n = others.size
+                Text("$n more album${if (n > 1) "s are" else " is"} called ${album.title}", style = T.rowSecondary)
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "By " + others.mapNotNull { it.artist }.distinct().take(4).joinToString(", ") +
+                        ". Combine them into one album (like a soundtrack) by giving every song the same album artist. Your album art is kept.",
+                    style = T.ui(12.5.sp), color = C.Muted,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.text.BasicTextField(
+                        name, { name = it }, singleLine = true,
+                        textStyle = T.ui(14.sp).copy(color = C.Fg), cursorBrush = androidx.compose.ui.graphics.SolidColor(C.Amber),
+                        modifier = Modifier.weight(1f).border(1.dp, C.HairStrong).padding(horizontal = 10.dp, vertical = 9.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlineBtn("Combine", color = C.AmberText, border = C.Amber) {
+                        if (name.isBlank()) return@OutlineBtn
+                        c.repo.combineAlbums(listOf(album) + others, name)
+                        c.st.stack.removeAt(c.st.stack.lastIndex)
+                        c.st.push(com.amosley.signal.ui.Screen.Album(com.amosley.signal.core.albumKeyOf(album.title, name.trim())))
+                        c.toast(if ((listOf(album) + others).any { a -> a.tracks.any { it.origin == Origin.PC } }) "Combined · writing album artist on ${c.pcName}" else "Combined")
+                    }
+                }
+                Text("Album artist", style = T.ui(11.5.sp), color = C.Faint, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
     }
 }
