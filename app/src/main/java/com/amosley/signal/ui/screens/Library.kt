@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.remember
+import com.amosley.signal.core.SortKey
+import com.amosley.signal.ui.components.AlphaRail
+import com.amosley.signal.ui.components.JumpIndex
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -102,59 +108,87 @@ fun StatusLine(c: Ctx, modifier: Modifier = Modifier) {
     }
 }
 
+private const val POSTER_COLS = 3
+private const val ALBUM_COLS = 2
+
 @Composable
 fun LibraryPane(c: Ctx) {
     val st = c.st
     val section = if (c.unfolded && st.section == Section.SETTINGS) Section.MUSIC else st.section
-    LazyColumn(Modifier.fillMaxSize()) {
-        item {
-            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Text(section.label, style = T.sectionTitle, color = C.Fg, modifier = Modifier.weight(1f))
-                    val newCount = importCandidates(c).size
-                    if (newCount > 0 && section == Section.MUSIC) {
-                        OutlineBtn("+$newCount new", color = C.AmberText, border = C.Amber) { st.sheet = Sheet.Import }
-                        Spacer(Modifier.width(8.dp))
+    val listState = rememberLazyListState()
+    val jump = remember { JumpIndex() }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), state = listState) {
+            jump.reset()
+            counted(jump) {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(section.label, style = T.sectionTitle, color = C.Fg, modifier = Modifier.weight(1f))
+                        val newCount = importCandidates(c).size
+                        if (newCount > 0 && section == Section.MUSIC) {
+                            OutlineBtn("+$newCount new", color = C.AmberText, border = C.Amber) { st.sheet = Sheet.Import }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        SquareBtn(Icons.Filled.Search, size = 32.dp, desc = "Search") { st.push(Screen.Search) }
+                        if (c.unfolded) {
+                            Spacer(Modifier.width(8.dp))
+                            SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
+                        }
                     }
-                    SquareBtn(Icons.Filled.Search, size = 32.dp, desc = "Search") { st.push(Screen.Search) }
+                    // PC connection status lives in Settings only.
                     if (c.unfolded) {
-                        Spacer(Modifier.width(8.dp))
-                        SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
-                    }
-                }
-                // PC connection status lives in Settings only.
-                if (c.unfolded) {
-                    Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth().border(1.dp, C.HairStrong)) {
-                        listOf(Section.MUSIC, Section.MOVIES, Section.TV).forEach { s ->
-                            val on = section == s
-                            Box(
-                                Modifier.weight(1f).height(32.dp).background(if (on) C.Fg else Color.Transparent).clickable { st.goSection(s) },
-                                contentAlignment = Alignment.Center,
-                            ) { Mono(s.label, color = if (on) C.Bg else C.Muted, style = T.mono(10.5.sp, 600)) }
+                        Spacer(Modifier.height(14.dp))
+                        Row(Modifier.fillMaxWidth().border(1.dp, C.HairStrong)) {
+                            listOf(Section.MUSIC, Section.MOVIES, Section.TV).forEach { s ->
+                                val on = section == s
+                                Box(
+                                    Modifier.weight(1f).height(32.dp).background(if (on) C.Fg else Color.Transparent).clickable { st.goSection(s) },
+                                    contentAlignment = Alignment.Center,
+                                ) { Mono(s.label, color = if (on) C.Bg else C.Muted, style = T.mono(10.5.sp, 600)) }
+                            }
                         }
                     }
                 }
             }
-        }
-        when (section) {
-            Section.MUSIC -> {
-                item { SubTabs(c) }
-                when (st.tab) {
-                    MusicTab.RECENT -> recent(c)
-                    MusicTab.SONGS -> songs(c)
-                    MusicTab.ALBUMS -> albums(c)
-                    MusicTab.ARTISTS -> artists(c)
-                    MusicTab.PLAYLISTS -> playlists(c)
-                    MusicTab.VIDEOS -> musicVideos(c)
+            when (section) {
+                Section.MUSIC -> {
+                    counted(jump) { SubTabs(c) }
+                    when (st.tab) {
+                        MusicTab.RECENT -> recent(c)
+                        MusicTab.SONGS -> songs(c, jump)
+                        MusicTab.ALBUMS -> albums(c, jump)
+                        MusicTab.ARTISTS -> artists(c, jump)
+                        MusicTab.PLAYLISTS -> playlists(c)
+                        MusicTab.VIDEOS -> musicVideos(c)
+                    }
                 }
+                Section.MOVIES -> movies(c, jump)
+                Section.TV -> shows(c, jump)
+                Section.SETTINGS -> Unit
             }
-            Section.MOVIES -> movies(c)
-            Section.TV -> shows(c)
-            Section.SETTINGS -> Unit
+            item { Spacer(Modifier.height(24.dp)) }
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        if (alphaRailOn(c, section)) AlphaRail(listState, jump)
     }
+}
+
+/** Show the A–Z strip only for long lists sorted by a name. */
+private fun alphaRailOn(c: Ctx, section: Section): Boolean = when (section) {
+    Section.MUSIC -> when (c.st.tab) {
+        MusicTab.SONGS -> sortPref(c, SortTab.SONGS).key in setOf(SortKey.TITLE, SortKey.ARTIST, SortKey.ALBUM) && c.lib.tracks.size > 40
+        MusicTab.ALBUMS -> sortPref(c, SortTab.ALBUMS).key in setOf(SortKey.TITLE, SortKey.ARTIST) && c.lib.albums.size > 24
+        MusicTab.ARTISTS -> sortPref(c, SortTab.ARTISTS).key == SortKey.TITLE && c.lib.artists.size > 30
+        else -> false
+    }
+    Section.MOVIES -> sortPref(c, SortTab.MOVIES).key == SortKey.TITLE && c.lib.movies.size > 30
+    Section.TV -> sortPref(c, SortTab.SHOWS).key == SortKey.TITLE && c.lib.shows.size > 30
+    Section.SETTINGS -> false
+}
+
+/** An item that comes before the sorted rows, counted so the A–Z strip knows where the rows start. */
+private fun LazyListScope.counted(j: JumpIndex, content: @Composable LazyItemScope.() -> Unit) {
+    j.count++
+    item(content = content)
 }
 
 @Composable
@@ -282,16 +316,17 @@ private fun EmptyLibrary(c: Ctx) {
     }
 }
 
-private fun LazyListScope.songs(c: Ctx) {
-    val all = Sorting.songs(c.lib.tracks, sortPref(c, SortTab.SONGS))
+private fun LazyListScope.songs(c: Ctx, jump: JumpIndex) {
+    val pref = sortPref(c, SortTab.SONGS)
+    val all = Sorting.songs(c.lib.tracks, pref)
     val missing = untagged(c)
-    item {
+    counted(jump) {
         Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FilledBtn("Play", icon = Icons.Filled.PlayArrow, modifier = Modifier.weight(1f)) { c.hub.playList(all, 0) }
             FilledBtn("Shuffle", icon = Icons.Filled.Shuffle, bg = Color.White.copy(alpha = 0.1f), fg = C.Fg, modifier = Modifier.weight(1f)) { c.hub.shuffleAll(all) }
         }
     }
-    if (missing.isNotEmpty()) item {
+    if (missing.isNotEmpty()) counted(jump) {
         Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
             CardBox {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -308,12 +343,13 @@ private fun LazyListScope.songs(c: Ctx) {
             }
         }
     }
-    item { SortBar(c, SortTab.SONGS, Modifier.padding(top = 8.dp)) }
+    counted(jump) { SortBar(c, SortTab.SONGS, Modifier.padding(top = 8.dp)) }
+    jump.mark(all.map { t -> when (pref.key) { SortKey.ARTIST -> t.artist; SortKey.ALBUM -> t.album; else -> t.title } })
     songRows(c, all, "songs")
 }
 
 fun LazyListScope.albumGrid(c: Ctx, albums: List<Album>, key: String) {
-    val cols = if (c.unfolded) 2 else 2
+    val cols = ALBUM_COLS
     items(albums.chunked(cols), key = { row -> "$key-${row.first().key}" }) { row ->
         Row(Modifier.padding(horizontal = 20.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             row.forEach { a ->
@@ -329,20 +365,25 @@ fun LazyListScope.albumGrid(c: Ctx, albums: List<Album>, key: String) {
     }
 }
 
-private fun LazyListScope.albums(c: Ctx) {
-    item {
+private fun LazyListScope.albums(c: Ctx, jump: JumpIndex) {
+    counted(jump) {
         Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 6.dp)) {
             OutlineBtn("Shuffle all albums", icon = Icons.Filled.Shuffle) { c.hub.shuffleAll(c.lib.albums.flatMap { it.tracks }) }
         }
     }
-    item { SortBar(c, SortTab.ALBUMS) }
-    albumGrid(c, Sorting.albums(c.lib.albums, sortPref(c, SortTab.ALBUMS)), "albums")
+    counted(jump) { SortBar(c, SortTab.ALBUMS) }
+    val pref = sortPref(c, SortTab.ALBUMS)
+    val list = Sorting.albums(c.lib.albums, pref)
+    jump.mark(list.map { if (pref.key == SortKey.ARTIST) it.artist else it.title }, perRow = ALBUM_COLS)
+    albumGrid(c, list, "albums")
 }
 
-private fun LazyListScope.artists(c: Ctx) {
-    item { SortBar(c, SortTab.ARTISTS, Modifier.padding(top = 10.dp)) }
+private fun LazyListScope.artists(c: Ctx, jump: JumpIndex) {
+    counted(jump) { SortBar(c, SortTab.ARTISTS, Modifier.padding(top = 10.dp)) }
     val newest = HashMap<String, Long>().apply { c.lib.tracks.forEach { t -> t.artist?.let { a -> if (t.addedAt > (this[a] ?: 0)) this[a] = t.addedAt } } }
-    items(Sorting.artists(c.lib.artists, newest, sortPref(c, SortTab.ARTISTS)), key = { "artist-${it.first}" }) { (name, n) ->
+    val list = Sorting.artists(c.lib.artists, newest, sortPref(c, SortTab.ARTISTS))
+    jump.mark(list.map { it.first })
+    items(list, key = { "artist-${it.first}" }) { (name, n) ->
         Row(Modifier.fillMaxWidth().clickable { c.st.openArtist(name) }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Art(name, c.artistArt(name), Modifier.size(56.dp), shape = CircleShape)
             Spacer(Modifier.width(14.dp))
@@ -442,7 +483,7 @@ fun PosterBadge(c: Ctx, id: String, origin: Origin, modifier: Modifier = Modifie
 }
 
 private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, cell: @Composable (Int, Modifier) -> Unit) {
-    val cols = if (c.unfolded) 3 else 3
+    val cols = POSTER_COLS
     val rows = (0 until count).chunked(cols)
     items(rows, key = { "$it-${key(it.first())}" }) { row ->
         Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -452,15 +493,16 @@ private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, c
     }
 }
 
-private fun LazyListScope.movies(c: Ctx) {
+private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
     val list: List<Movie> = Sorting.movies(c.lib.movies, sortPref(c, SortTab.MOVIES))
     val cont = Watching.continueWatching(c.lib.movies, emptyList())
-    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
     val recent = Watching.recentMovies(c.lib.movies)
-    if (recent.isNotEmpty() && list.size > 6) item { RecentMoviesRow(c, recent) }
-    item { SectionLabel("All movies", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
-    item { SortBar(c, SortTab.MOVIES) }
-    if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
+    if (recent.isNotEmpty() && list.size > 6) counted(jump) { RecentMoviesRow(c, recent) }
+    counted(jump) { SectionLabel("All movies", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+    counted(jump) { SortBar(c, SortTab.MOVIES) }
+    if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
+    jump.mark(list.map { it.title }, perRow = POSTER_COLS)
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val mv = list[i]
         Column(m.clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
@@ -477,17 +519,18 @@ private fun LazyListScope.movies(c: Ctx) {
     }
 }
 
-private fun LazyListScope.shows(c: Ctx) {
+private fun LazyListScope.shows(c: Ctx, jump: JumpIndex) {
     val list: List<Show> = Sorting.shows(c.lib.shows, sortPref(c, SortTab.SHOWS))
     val cont = Watching.continueWatching(emptyList(), c.lib.shows)
-    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
     val next = Watching.upNext(c.lib.shows)
-    if (next.isNotEmpty()) item { WatchRow(c, "Up next", next) }
+    if (next.isNotEmpty()) counted(jump) { WatchRow(c, "Up next", next) }
     val recent = Watching.recentEpisodes(c.lib.shows)
-    if (recent.isNotEmpty()) item { WatchRow(c, "Recently added", recent, recentStyle = true) }
-    item { SectionLabel("All shows", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
-    item { SortBar(c, SortTab.SHOWS) }
-    if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
+    if (recent.isNotEmpty()) counted(jump) { WatchRow(c, "Recently added", recent, recentStyle = true) }
+    counted(jump) { SectionLabel("All shows", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+    counted(jump) { SortBar(c, SortTab.SHOWS) }
+    if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
+    jump.mark(list.map { it.title }, perRow = POSTER_COLS)
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val sh = list[i]
         Column(m.clickable { c.st.season = null; c.st.push(Screen.ShowPage(sh.id)) }) {

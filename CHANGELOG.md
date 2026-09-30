@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.12] - 2026-09-30
+
+### A–Z scrub bar for big libraries
+- Songs, Albums, Artists, Movies and TV Shows now have an A–Z strip on the right edge, like Apple Music. Tap a letter to jump to it, or drag along the strip to scrub through the list; a large letter shows where you are.
+- It follows the current sort. When songs are sorted by Artist or Album, the letters jump by artist or album name. Like the sorting, it ignores a leading "The" or "A".
+- The strip appears on long lists sorted A–Z, by Artist or by Album. It is hidden when a list is sorted by date, year, length or rating.
+
 ## [1.0.11] - 2026-09-30
 
 - The "PC name · synced X min ago" line no longer appears at the top of Music, Movies and TV Shows. PC connection status is now shown only in Settings.
