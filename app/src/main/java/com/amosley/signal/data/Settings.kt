@@ -54,3 +54,34 @@ enum class PhoneFolderType(val label: String) {
 }
 
 enum class LyricMode { ORIG, BOTH, TRANS }
+
+/** Tag edits made on the phone. Null = unchanged. Applied on top of the file's own tags. */
+@Serializable
+data class TrackEdit(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val albumArtist: String? = null,
+    val genre: String? = null,
+    val year: Int? = null,
+    val track: Int? = null,
+    val disc: Int? = null,
+) {
+    fun merge(o: TrackEdit) = TrackEdit(
+        o.title ?: title, o.artist ?: artist, o.album ?: album, o.albumArtist ?: albumArtist,
+        o.genre ?: genre, o.year ?: year, o.track ?: track, o.disc ?: disc,
+    )
+
+    /** Fields for the PC agent's POST /api/tags. */
+    fun toFields(): Map<String, String> = buildMap {
+        title?.let { put("title", it) }; artist?.let { put("artist", it) }; album?.let { put("album", it) }
+        albumArtist?.let { put("albumArtist", it) }; genre?.let { put("genre", it) }
+        year?.let { put("year", it.toString()) }; track?.let { put("track", it.toString()) }; disc?.let { put("disc", it.toString()) }
+    }
+
+    fun apply(t: com.amosley.signal.core.Track) = t.copy(
+        title = title ?: t.title, artist = artist ?: t.artist, album = album ?: t.album, albumArtist = albumArtist ?: t.albumArtist,
+        genres = genre?.split(';', ',', '/')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: t.genres,
+        year = year ?: t.year, track = track ?: t.track, disc = disc ?: t.disc,
+    )
+}

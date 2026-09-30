@@ -83,6 +83,21 @@ class AgentClient(private val http: OkHttpClient) {
 
     suspend fun rescan(base: String, token: String) { call(base, "/api/rescan", token, "{}".toRequestBody(jsonType)) }
 
+    /** POST /api/tags with any of title/artist/album/albumArtist/genre/year/track/disc. */
+    suspend fun writeTags(base: String, token: String, id: String, fields: Map<String, String>, baseMtime: Long, force: Boolean): TagResult {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            fields.forEach { (k, v) -> put(k, kotlinx.serialization.json.JsonPrimitive(v)) }
+            put("baseMtime", kotlinx.serialization.json.JsonPrimitive(baseMtime))
+            put("force", kotlinx.serialization.json.JsonPrimitive(force))
+        }
+        return SignalJson.decodeFromString(call(base, "/api/tags/$id", token, body.toString().toRequestBody(jsonType)))
+    }
+
+    /** POST /api/art/:trackId — album cover saved into the song's folder on the PC. */
+    suspend fun uploadCover(base: String, token: String, trackId: String, jpeg: ByteArray) {
+        call(base, "/api/art/$trackId", token, jpeg.toRequestBody("image/jpeg".toMediaType()))
+    }
+
     suspend fun writeArtist(base: String, token: String, id: String, artist: String, baseMtime: Long, force: Boolean): TagResult =
         SignalJson.decodeFromString(call(base, "/api/tags/$id", token, SignalJson.encodeToString(TagBody.serializer(), TagBody(artist, baseMtime, force)).toRequestBody(jsonType)))
 

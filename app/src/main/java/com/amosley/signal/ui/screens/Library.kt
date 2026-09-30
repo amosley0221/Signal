@@ -278,7 +278,7 @@ fun LazyListScope.albumGrid(c: Ctx, albums: List<Album>, key: String) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             row.forEach { a ->
                 Column(Modifier.weight(1f).clickable { c.st.push(Screen.Album(a.key)) }) {
-                    Art(a.key, a.artTrack?.let { c.art(it) }, Modifier.fillMaxWidth().aspectRatio(1f))
+                    Art(a.key, c.albumArt(a), Modifier.fillMaxWidth().aspectRatio(1f))
                     Spacer(Modifier.height(8.dp))
                     Text(a.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(a.artist ?: "Unknown artist", style = T.meta, color = if (a.artist == null) C.AmberText else C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -301,9 +301,8 @@ private fun LazyListScope.albums(c: Ctx) {
 private fun LazyListScope.artists(c: Ctx) {
     item { Spacer(Modifier.height(10.dp)) }
     items(c.lib.artists, key = { "artist-${it.first}" }) { (name, n) ->
-        val sample = c.lib.tracks.firstOrNull { it.artist == name }
         Row(Modifier.fillMaxWidth().clickable { c.st.openArtist(name) }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Art(name, sample?.let { c.art(it) }, Modifier.size(56.dp), shape = CircleShape)
+            Art(name, c.artistArt(name), Modifier.size(56.dp), shape = CircleShape)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, style = T.row)

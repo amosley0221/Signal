@@ -75,12 +75,22 @@ class Ctx(
     val dl: Map<String, DlState>,
     val unfolded: Boolean,
     val playlists: List<UserPlaylist>,
+    /** Bumps when custom art changes; read so art recomposes. */
+    val artVersion: Int = 0,
 ) {
     val repo get() = app.repo
     val hub get() = app.hub
     val pcName: String get() = settings.pc?.name ?: "PC"
 
-    fun art(t: Track): Any? = when (t.origin) {
+    /** Song art: custom album art first, then the file's own cover. */
+    fun art(t: Track): Any? = repo.albumArtFile(t.albumKey) ?: fileArt(t)
+
+    fun albumArt(a: com.amosley.signal.core.Album): Any? = repo.albumArtFile(a.key) ?: a.artTrack?.let { fileArt(it) }
+
+    /** Artist picture: one you set or generated, else the art of one of their songs. */
+    fun artistArt(name: String): Any? = repo.artistArtFile(name) ?: lib.tracks.firstOrNull { it.artist == name }?.let { art(it) }
+
+    private fun fileArt(t: Track): Any? = when (t.origin) {
         Origin.PC -> if (t.hasArt) repo.artUrl(t.id) else null
         Origin.PHONE -> t.uri.takeIf { it.startsWith("content://") }?.let { "$it/albumart" }
     }
@@ -111,6 +121,7 @@ fun SignalRoot(st: AppState) {
     val status by app.repo.status.collectAsState()
     val dl by app.repo.downloads.states.collectAsState()
     val playlists by app.repo.playlists.collectAsState()
+    val artVersion by app.repo.artVersion.collectAsState()
 
     LaunchedEffect(Unit) {
         app.toasts.collect { msg ->
@@ -131,7 +142,7 @@ fun SignalRoot(st: AppState) {
 
     BoxWithConstraints(Modifier.fillMaxSize().background(C.Bg)) {
         val unfolded = maxWidth >= 600.dp
-        val c = Ctx(app, st, lib, player, settings, status, dl, unfolded, playlists)
+        val c = Ctx(app, st, lib, player, settings, status, dl, unfolded, playlists, artVersion)
         val screen = st.screen
         when {
             screen is Screen.Video -> VideoScreen(c, screen)

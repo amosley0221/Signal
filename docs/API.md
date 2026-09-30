@@ -92,7 +92,10 @@ URLs in the catalogue are relative to the agent base URL; the app appends the to
 - `POST /api/lyrics/:id` body `{"lrc":"[00:01.00]First line\n[00:03.50]Second line"}` → `{"ok":true}`.
   Writes `<song>.lrc` next to the file (an existing one is kept once as `<song>.lrc.bak`). Used by the phone's
   lyrics editor (paste + tap-to-sync). `400` for an empty body, `404` for unknown ids.
-- `POST /api/tags/:id` body `{"artist":"Glass Orchard","baseMtime":1790000000000}` →
+- `POST /api/art/:id` (id = any song in the album) raw `image/jpeg` or `image/png` body → `{"ok":true}`. Saves `cover.jpg`/`cover.png`
+  in the song's folder (existing cover/folder images kept once as `.bak`).
+- `POST /api/tags/:id` body `{"artist":"Glass Orchard","baseMtime":1790000000000}` (also accepts `title`, `album`, `albumArtist`,
+  `genre` — `;`-separated, `year`, `track`, `disc`) →
   `200 {"ok":true,"mtime":<new mtime>}`; `409 {"error":"conflict","pcArtist":"…"}` when the file's mtime differs from
   `baseMtime` and the PC-side value differs. Send `"force":true` to overwrite.
 - `POST /api/suggest-artists` body `{"trackId":"…","prompt":"a duo from a rainy port city"}` →

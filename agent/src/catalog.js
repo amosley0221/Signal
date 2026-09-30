@@ -342,16 +342,16 @@ export class Catalog {
             artist: o.artist ?? m.artist ?? null,
             album: o.album ?? m.album ?? parentName,
             albumArtist: o.albumArtist ?? m.albumArtist ?? null,
-            year: m.year ?? null,
-            disc: m.disc ?? null,
-            track: m.track ?? (leadNo ? Number(leadNo[1]) : null),
+            year: o.year ? Number(o.year) : m.year ?? null,
+            disc: o.disc ? Number(o.disc) : m.disc ?? null,
+            track: o.track ? Number(o.track) : m.track ?? (leadNo ? Number(leadNo[1]) : null),
             durationMs: m.durationMs ?? null,
             container: containerFor(fileName),
             codec: m.codec ?? null,
             bitDepth: m.bitDepth ?? null,
             sampleRate: m.sampleRate ?? null,
             size: e.size, mtime: e.mtime, addedAt: e.addedAt,
-            genres: m.genres || [],
+            genres: o.genre != null ? String(o.genre).split(/[;,/]/).map((g) => g.trim()).filter(Boolean) : m.genres || [],
             hasArt: !!(m.hasPicture || e.side?.art?.cover),
             hasLyrics: !!(e.side?.lrc || m.hasEmbeddedLyrics),
             hasTranslation: !!e.side?.enLrc,
@@ -556,6 +556,27 @@ export class Catalog {
     return { ok: true, file: lrc };
   }
 
+  /**
+   * POST /api/art/:trackId — save an album cover (JPEG/PNG bytes) as cover.jpg/cover.png in the song's
+   * folder so the whole album (and Plex) picks it up. An existing cover is kept once as <name>.bak.
+   */
+  async saveCover(id, buf, mime) {
+    const it = this.get(id);
+    if (!it || it.type !== 'track') return null;
+    const ext = /png/i.test(mime || '') ? 'png' : 'jpg';
+    const dir = path.dirname(it.abs);
+    const dest = path.join(dir, `cover.${ext}`);
+    for (const other of ['cover.jpg', 'cover.png', 'folder.jpg']) {
+      const f = path.join(dir, other);
+      if (await fsp.stat(f).catch(() => null)) await fsp.copyFile(f, `${f}.bak`, fs.constants.COPYFILE_EXCL).catch(() => {});
+      if (other !== `cover.${ext}` && other.startsWith('cover.')) await fsp.rm(f, { force: true }).catch(() => {});
+    }
+    await fsp.writeFile(dest, buf);
+    await this.refreshFile(it.lib, it.abs).catch(() => {});
+    this.markDirty();
+    return { ok: true };
+  }
+
   /** Resolve art: {file} | {plex: path} | {data, mime} | null */
   async art(id, kind) {
     const it = this.get(id);
@@ -608,7 +629,12 @@ export class Catalog {
     const it = this.get(id);
     if (!it || it.type !== 'track') return { status: 404, body: { error: 'not_found' } };
     const fields = {};
-    for (const k of TAG_FIELDS) if (typeof body[k] === 'string') fields[k] = body[k].trim();
+    for (const k of TAG_FIELDS) {
+      const v = body[k];
+      if (typeof v === 'string') fields[k] = v.trim();
+      else if (typeof v === 'number' && Number.isFinite(v) && ['year', 'track', 'disc'].includes(k)) fields[k] = String(Math.round(v));
+    }
+    for (const k of ['year', 'track', 'disc']) if (k in fields && fields[k] !== '' && !/^\d{1,4}$/.test(fields[k])) delete fields[k];
     if (!Object.keys(fields).length) return { status: 400, body: { error: 'bad_request' } };
     const st = await fsp.stat(it.abs).catch(() => null);
     if (!st) return { status: 404, body: { error: 'not_found' } };
@@ -620,7 +646,8 @@ export class Catalog {
     const curMtime = Math.round(st.mtimeMs);
     const pcArtist = cur.item.artist ?? null;
     const base = body.baseMtime != null ? Math.round(Number(body.baseMtime)) : null;
-    const differs = Object.entries(fields).some(([k, v]) => (cur.item[k] ?? '') !== v);
+    const curVal = (k) => (k === 'genre' ? (cur.item.genres || []).join('; ') : cur.item[k] == null ? '' : String(cur.item[k]));
+    const differs = Object.entries(fields).some(([k, v]) => curVal(k) !== v);
     if (!body.force && base != null && base !== curMtime && differs) {
       return { status: 409, body: { error: 'conflict', pcArtist } };
     }

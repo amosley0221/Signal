@@ -126,7 +126,7 @@ fun SearchScreen(c: Ctx) {
             group("Artists", results.artists.isNotEmpty())
             items(results.artists, key = { "a-$it" }) { a ->
                 Row(Modifier.fillMaxWidth().clickable { c.st.openArtist(a) }.padding(horizontal = 20.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Art(a, c.lib.tracks.firstOrNull { it.artist == a }?.let { c.art(it) }, Modifier.size(44.dp), shape = CircleShape)
+                    Art(a, c.artistArt(a), Modifier.size(44.dp), shape = CircleShape)
                     Spacer(Modifier.width(12.dp))
                     Text(a, style = T.row)
                 }
@@ -134,7 +134,7 @@ fun SearchScreen(c: Ctx) {
             group("Albums", results.albums.isNotEmpty())
             items(results.albums, key = { "al-${it.key}" }) { al ->
                 Row(Modifier.fillMaxWidth().clickable { c.st.push(Screen.Album(al.key)) }.padding(horizontal = 20.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Art(al.key, al.artTrack?.let { c.art(it) }, Modifier.size(44.dp))
+                    Art(al.key, c.albumArt(al), Modifier.size(44.dp))
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(al.title, style = T.row)

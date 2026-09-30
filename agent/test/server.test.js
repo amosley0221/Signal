@@ -178,6 +178,26 @@ test('lyrics, suggestions, tag edit with conflict, activity', async () => {
   assert.equal(bad.status, 400);
   await bad.text();
 
+  const more = await api(`/api/tags/${t.id}`, { method: 'POST', body: JSON.stringify({ genre: 'dream pop; slow', year: 2026, track: '7', album: 'Glass Songs', force: true }) });
+  assert.equal(more.status, 200);
+  await more.json();
+  const after = (await (await api('/api/catalog')).json()).tracks[0];
+  assert.deepEqual(after.genres, ['dream pop', 'slow']);
+  assert.equal(after.year, 2026);
+  assert.equal(after.track, 7);
+  assert.equal(after.album, 'Glass Songs');
+
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000100ffff03000006000557bfabd40000000049454e44ae426082', 'hex');
+  const up = await api(`/api/art/${t.id}`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png });
+  assert.equal(up.status, 200);
+  await up.json();
+  const art = await api(`/api/art/${t.id}?kind=cover`);
+  assert.equal(art.status, 200);
+  assert.ok((await art.arrayBuffer()).byteLength > 0);
+  const badArt = await api(`/api/art/${t.id}`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'x' });
+  assert.equal(badArt.status, 400);
+  await badArt.text();
+
   const acts = await (await api('/api/activity')).json();
   assert.ok(acts.some((a) => a.kind === 'scan' && a.state === 'done'));
   assert.ok(acts.some((a) => a.kind === 'tag'));

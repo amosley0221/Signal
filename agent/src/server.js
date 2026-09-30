@@ -211,6 +211,22 @@ export function createServer(agent) {
     sendJson(req, res, 200, { ok: true });
   });
 
+  route('POST', '/api/art/:id', async (req, res, p) => {
+    const mime = String(req.headers['content-type'] || '');
+    if (!/^image\/(jpeg|png)/i.test(mime)) return sendJson(req, res, 400, { error: 'bad_request' });
+    const chunks = [];
+    let size = 0;
+    for await (const c of req) {
+      size += c.length;
+      if (size > 20 * 1024 * 1024) return sendJson(req, res, 413, { error: 'too_large' });
+      chunks.push(c);
+    }
+    if (!size) return sendJson(req, res, 400, { error: 'bad_request' });
+    const r = await agent.catalog.saveCover(p.id, Buffer.concat(chunks), mime);
+    if (!r) return notFound(req, res);
+    sendJson(req, res, 200, r);
+  });
+
   route('POST', '/api/tags/:id', async (req, res, p) => {
     const body = await readJson(req);
     const r = await agent.catalog.editTags(p.id, body);

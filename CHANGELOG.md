@@ -3,6 +3,22 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.3] - 2026-09-30
+
+### Edit every song detail
+- The song editor (**Edit** on Now Playing, or **⋯ → Edit song details / artist**) now covers title, artist, album, album artist, genre, year, and track and disc number.
+- For songs on your PC, the changes are written into the file on the PC. For songs on the phone, they're saved in Signal.
+- The fictional artist-name suggester is still in the same sheet, below the details.
+
+### Album art and artist pictures
+- On any album page, tap **Change album art**. On any artist page, tap **Change artist picture**.
+- **Choose an image** from your phone, for example art you made. It's cropped square automatically.
+- Or **generate one**: six designs made from the name (Horizon, Panels, Sun, Stripes, Glow, Mono). Tap **More designs** for new variations.
+  Artist pictures use the artist's initials and show as a round photo on the artist page and in the Artists list.
+- Album art for PC albums is also saved as `cover.jpg` in the album folder on the PC, so Plex shows it too.
+  This needs the new **SignalAgent.exe** from this release.
+- Custom art replaces the song's built-in cover everywhere in Signal. **Remove custom art** goes back to the original.
+
 ## [1.0.2] - 2026-09-30
 
 ### Add your own lyrics (great for Suno songs)

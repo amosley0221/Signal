@@ -66,7 +66,11 @@ data class LibraryView(
 data class TagConflict(val trackId: String, val title: String, val phoneArtist: String, val pcArtist: String)
 
 @Serializable
-data class TagJob(val trackId: String, val title: String, val artist: String, val state: String, val message: String? = null, val at: Long = 0)
+data class TagJob(
+    val trackId: String, val title: String, val artist: String, val state: String, val message: String? = null, val at: Long = 0,
+    /** All fields to write; empty = artist only (older jobs). */
+    val fields: Map<String, String> = emptyMap(),
+)
 
 @Serializable
 private data class Meta(
@@ -90,6 +94,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     private val catalogStore = JsonStore(File(files, "catalog.json"), Catalog.serializer()) { Catalog() }
     private val librariesStore = JsonStore(File(files, "libraries.json"), ListSerializer(Library.serializer())) { emptyList() }
     private val overridesStore = JsonStore(File(files, "artist-overrides.json"), MapSerializer(String.serializer(), String.serializer())) { emptyMap() }
+    private val editsStore = JsonStore(File(files, "track-edits.json"), MapSerializer(String.serializer(), TrackEdit.serializer())) { emptyMap() }
     private val playlistsStore = JsonStore(File(files, "playlists.json"), ListSerializer(UserPlaylist.serializer())) { emptyList() }
     private val conflictsStore = JsonStore(File(files, "conflicts.json"), ListSerializer(TagConflict.serializer())) { emptyList() }
     private val tagJobsStore = JsonStore(File(files, "tag-jobs.json"), ListSerializer(TagJob.serializer())) { emptyList() }
@@ -103,6 +108,8 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     val libraries: StateFlow<List<Library>> = _libraries
     private val _overrides = MutableStateFlow(overridesStore.load())
     val overrides: StateFlow<Map<String, String>> = _overrides
+    private val _edits = MutableStateFlow(editsStore.load())
+    val edits: StateFlow<Map<String, TrackEdit>> = _edits
     private val _playlists = MutableStateFlow(playlistsStore.load())
     val playlists: StateFlow<List<UserPlaylist>> = _playlists
     private val _conflicts = MutableStateFlow(conflictsStore.load())
@@ -138,12 +145,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     val library: StateFlow<LibraryView> = combine(
         combine(_catalog, _localTracks, _localVideos) { c, lt, lv -> Triple(c, lt, lv) },
-        _overrides, _settings, downloads.states,
-    ) { (cat, localTracks, localVideos), overrides, settings, dl ->
-        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys)
+        _overrides, _settings, downloads.states, _edits,
+    ) { (cat, localTracks, localVideos), overrides, settings, dl, edits ->
+        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits)
     }.stateIn(scope, SharingStarted.Eagerly, LibraryView())
 
-    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>): LibraryView {
+    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap()): LibraryView {
         val enabledLibs = s.libModes.keys
         fun libOk(id: String?) = id == null || enabledLibs.isEmpty() || id in enabledLibs
         fun avail(id: String, origin: Origin) = !s.offline || origin == Origin.PHONE || (id in dlKeys && downloads.isDownloaded(id))
@@ -151,6 +158,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         val remoteTracks = cat.tracks.filter { libOk(it.libraryId) }.map { it.copy(origin = Origin.PC, uri = it.id) }
         val tracks = (remoteTracks + phone.tracks)
             .map { t -> overrides[t.id]?.let { t.copy(artist = it) } ?: t }
+            .map { t -> edits[t.id]?.apply(t) ?: t }
             .filter { avail(it.id, it.origin) }
         val videos = cat.videos.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.musicVideos
         val movies = cat.movies.filter { libOk(it.libraryId) && avail(it.id, Origin.PC) } + phone.movies
@@ -456,13 +464,73 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         }
     }
 
+    /** Save edited tags (title, album, genre, …). Kept on the phone; written into PC files by the agent. */
+    fun editTrack(track: Track, edit: TrackEdit) {
+        edit.artist?.let { a -> _overrides.update { it + (track.id to a) }; overridesStore.save(_overrides.value); onlineMisses -= track.id }
+        _edits.update { all -> all + (track.id to (all[track.id]?.merge(edit) ?: edit)) }
+        editsStore.save(_edits.value)
+        if (track.origin == Origin.PC) {
+            val fields = (_edits.value[track.id] ?: edit).toFields() + (edit.artist?.let { mapOf("artist" to it) } ?: emptyMap())
+            _tagJobs.update { jobs ->
+                jobs.filterNot { it.trackId == track.id } +
+                    TagJob(track.id, edit.title ?: track.title, edit.artist ?: track.artist.orEmpty(), "QUEUED", at = System.currentTimeMillis(), fields = fields)
+            }
+            tagJobsStore.save(_tagJobs.value)
+            scope.launch { flushTagJobs() }
+        }
+    }
+
+    // ---- Custom art (albums and artists) --------------------------------------------------------
+
+    private val artDir = File(files, "art").apply { mkdirs() }
+    private val _artVersion = MutableStateFlow(0)
+    /** Bumps whenever custom art changes, so screens reload images. */
+    val artVersion: StateFlow<Int> = _artVersion
+
+    private fun artFile(kind: String, key: String): File {
+        val hash = java.security.MessageDigest.getInstance("SHA-1").digest(key.lowercase().toByteArray()).joinToString("") { "%02x".format(it) }
+        return File(artDir, "$kind-$hash.jpg")
+    }
+
+    /** Names of custom art files, kept in memory so screens don't hit the disk while drawing. */
+    private val artNames: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().apply {
+        artDir.list()?.let { addAll(it) }
+    }
+
+    fun albumArtFile(albumKey: String): File? = artFile("album", albumKey).takeIf { it.name in artNames }
+    fun artistArtFile(name: String): File? = artFile("artist", name).takeIf { it.name in artNames }
+
+    /** Save album art on the phone and, for PC albums, as cover.jpg in the album folder on the PC. */
+    suspend fun saveAlbumArt(album: com.amosley.signal.core.Album, jpeg: ByteArray): String = withContext(Dispatchers.IO) {
+        artFile("album", album.key).also { it.writeBytes(jpeg); artNames += it.name }
+        _artVersion.update { it + 1 }
+        val pcTrack = album.tracks.firstOrNull { it.origin == Origin.PC } ?: return@withContext "Album art saved"
+        val p = pc
+        val b = _status.value.baseUrl
+        if (p == null || b == null || !_status.value.reachable) return@withContext "Album art saved on this phone · ${pcName} is offline"
+        runCatching { agent.uploadCover(b, p.token, pcTrack.id, jpeg) }
+            .fold({ "Album art saved · also saved as cover.jpg on ${p.name}" }, { "Album art saved on this phone · couldn't save it on ${p.name}" })
+    }
+
+    suspend fun saveArtistArt(name: String, jpeg: ByteArray): String = withContext(Dispatchers.IO) {
+        artFile("artist", name).also { it.writeBytes(jpeg); artNames += it.name }
+        _artVersion.update { it + 1 }
+        "Artist picture saved"
+    }
+
+    fun removeAlbumArt(albumKey: String) { artFile("album", albumKey).also { it.delete(); artNames -= it.name }; _artVersion.update { it + 1 } }
+    fun removeArtistArt(name: String) { artFile("artist", name).also { it.delete(); artNames -= it.name }; _artVersion.update { it + 1 } }
+
     private suspend fun flushTagJobs(force: Set<String> = emptySet()) {
         val p = pc ?: return
         val b = _status.value.baseUrl ?: return
         val jobs = _tagJobs.value.filter { it.state == "QUEUED" || it.state == "FAILED" }
         for (job in jobs) {
             val track = _catalog.value.tracks.firstOrNull { it.id == job.trackId }
-            val res = runCatching { agent.writeArtist(b, p.token, job.trackId, job.artist, track?.mtime ?: 0, job.trackId in force) }
+            val res = runCatching {
+                if (job.fields.isNotEmpty()) agent.writeTags(b, p.token, job.trackId, job.fields, track?.mtime ?: 0, job.trackId in force)
+                else agent.writeArtist(b, p.token, job.trackId, job.artist, track?.mtime ?: 0, job.trackId in force)
+            }
             val newState = when {
                 res.isFailure -> job.copy(state = "FAILED", message = res.exceptionOrNull()?.message)
                 res.getOrNull()?.ok == true -> job.copy(state = "DONE", message = null)

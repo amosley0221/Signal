@@ -5,10 +5,10 @@ import crypto from 'node:crypto';
 import NodeID3 from 'node-id3';
 import { hasExecutable, run } from './util.js';
 
-export const TAG_FIELDS = ['artist', 'title', 'album', 'albumArtist'];
+export const TAG_FIELDS = ['artist', 'title', 'album', 'albumArtist', 'genre', 'year', 'track', 'disc'];
 
-const FFMPEG_KEYS = { artist: 'artist', title: 'title', album: 'album', albumArtist: 'album_artist' };
-const ID3_KEYS = { artist: 'artist', title: 'title', album: 'album', albumArtist: 'performerInfo' };
+const FFMPEG_KEYS = { artist: 'artist', title: 'title', album: 'album', albumArtist: 'album_artist', genre: 'genre', year: 'date', track: 'track', disc: 'disc' };
+const ID3_KEYS = { artist: 'artist', title: 'title', album: 'album', albumArtist: 'performerInfo', genre: 'genre', year: 'year', track: 'trackNumber', disc: 'partOfSet' };
 
 /**
  * Write tags into the file if possible.

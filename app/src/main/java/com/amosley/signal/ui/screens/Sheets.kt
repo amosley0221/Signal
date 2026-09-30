@@ -127,6 +127,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.Actions -> ActionsSheet(c, sheet.trackId)
                 is Sheet.AddTo -> AddToSheet(c, sheet.trackId)
                 is Sheet.NewPlaylist -> NewPlaylistSheet(c, sheet.trackId)
+                is Sheet.Art -> ArtSheet(c, sheet.album, sheet.artist)
                 is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit
             }
         }
@@ -182,6 +183,8 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
         Mono("Done", color = C.Fg, style = T.mono(11.sp, 600), modifier = Modifier.clickable { c.st.sheet = null }.padding(4.dp))
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
+        TagFields(c, t)
+        Spacer(Modifier.height(20.dp))
         Mono("Artist", color = C.Muted)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -235,6 +238,56 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
                 if (t.origin == Origin.PC) "The ARTIST tag is written back to the file on ${c.pcName}." else "The name is saved on this phone.",
             style = T.ui(12.5.sp), color = C.Faint,
         )
+    }
+}
+
+/** Title / album / genre / year / track editor. Only changed fields are saved (and written to PC files). */
+@Composable
+private fun TagFields(c: Ctx, t: com.amosley.signal.core.Track) {
+    var title by remember(t.id) { mutableStateOf(t.title) }
+    var artist by remember(t.id) { mutableStateOf(t.artist.orEmpty()) }
+    var album by remember(t.id) { mutableStateOf(t.album.orEmpty()) }
+    var albumArtist by remember(t.id) { mutableStateOf(t.albumArtist.orEmpty()) }
+    var genre by remember(t.id) { mutableStateOf(t.genres.joinToString("; ")) }
+    var year by remember(t.id) { mutableStateOf(t.year?.toString().orEmpty()) }
+    var track by remember(t.id) { mutableStateOf(t.track?.toString().orEmpty()) }
+    var disc by remember(t.id) { mutableStateOf(t.disc?.toString().orEmpty()) }
+    fun changed(new: String, old: String?) = new.trim().takeIf { it.isNotEmpty() && it != old.orEmpty() }
+    fun changedInt(new: String, old: Int?) = new.trim().toIntOrNull()?.takeIf { it != old }
+    val edit = com.amosley.signal.data.TrackEdit(
+        title = changed(title, t.title), artist = changed(artist, t.artist), album = changed(album, t.album),
+        albumArtist = changed(albumArtist, t.albumArtist), genre = changed(genre, t.genres.joinToString("; ")),
+        year = changedInt(year, t.year), track = changedInt(track, t.track), disc = changedInt(disc, t.disc),
+    )
+    val dirty = edit != com.amosley.signal.data.TrackEdit()
+    Mono("Song details", color = C.Muted)
+    Spacer(Modifier.height(8.dp))
+    LabeledField("Title", title) { title = it }
+    LabeledField("Artist", artist) { artist = it }
+    LabeledField("Album", album) { album = it }
+    LabeledField("Album artist", albumArtist) { albumArtist = it }
+    LabeledField("Genre", genre, hint = "e.g. dream pop; slow") { genre = it }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f)) { LabeledField("Year", year) { year = it.filter(Char::isDigit).take(4) } }
+        Box(Modifier.weight(1f)) { LabeledField("Track", track) { track = it.filter(Char::isDigit).take(3) } }
+        Box(Modifier.weight(1f)) { LabeledField("Disc", disc) { disc = it.filter(Char::isDigit).take(2) } }
+    }
+    Spacer(Modifier.height(4.dp))
+    FilledBtn("Save changes", bg = C.Amber, fg = C.OnAmber, enabled = dirty, modifier = Modifier.fillMaxWidth()) {
+        c.repo.editTrack(t, edit)
+        c.toast(if (t.origin == Origin.PC) "Saved · writing tags on ${c.pcName}" else "Saved")
+    }
+    if (t.origin == Origin.PHONE) {
+        Text("Changes to songs on this phone are saved in Signal; the file itself isn't changed.", style = T.ui(12.sp), color = C.Faint, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+@Composable
+private fun LabeledField(label: String, value: String, hint: String = "", onChange: (String) -> Unit) {
+    Column(Modifier.padding(bottom = 8.dp)) {
+        Mono(label, style = T.metaMono, color = C.Faint)
+        Spacer(Modifier.height(3.dp))
+        Field(value, onChange, hint)
     }
 }
 
@@ -357,7 +410,7 @@ private fun ColumnScope.ActionsSheet(c: Ctx, trackId: String) {
     ActionRow("Add to queue", "End of queue") { c.hub.addToQueue(t); c.st.sheet = null }
     ActionRow("Add to playlist…") { c.st.sheet = Sheet.AddTo(t.id) }
     if (t.artist != null) ActionRow("Go to artist", t.artist) { c.st.openArtist(t.artist) }
-    ActionRow("Edit tags / suggest artist", chip = if (t.artist == null) "No artist" else null) { c.st.sheet = Sheet.Edit(t.id) }
+    ActionRow("Edit song details / artist", chip = if (t.artist == null) "No artist" else null) { c.st.sheet = Sheet.Edit(t.id) }
     ActionRow("Add / edit lyrics", "Paste · tap to sync") { c.st.sheet = Sheet.LyricsEditor(t.id) }
     if (t.origin == Origin.PC) {
         when (val d = c.dlState(t.id)) {

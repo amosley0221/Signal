@@ -102,6 +102,8 @@ private fun DetailHeader(
     meta: String,
     tracks: List<Track>,
     round: Boolean = false,
+    changeArt: String? = null,
+    onChangeArt: (() -> Unit)? = null,
     extra: @Composable () -> Unit = {},
 ) {
     Box(Modifier.fillMaxWidth()) {
@@ -137,6 +139,9 @@ private fun DetailHeader(
             }
             Spacer(Modifier.height(6.dp))
             Mono(meta, color = C.Faint, style = T.metaMono)
+            if (changeArt != null && onChangeArt != null) {
+                Mono(changeArt, color = C.AmberText, style = T.metaMono, modifier = Modifier.clickable(onClick = onChangeArt).padding(top = 8.dp, bottom = 2.dp, start = 8.dp, end = 8.dp))
+            }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 FilledBtn("Play", icon = Icons.Filled.PlayArrow, modifier = Modifier.width(120.dp)) { c.hub.playList(tracks, 0) }
@@ -219,11 +224,13 @@ fun AlbumScreen(c: Ctx, key: String) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             DetailHeader(
-                c, album.key, album.artTrack?.let { c.art(it) }, album.title,
+                c, album.key, c.albumArt(album), album.title,
                 subtitle = listOfNotNull(album.artist ?: "Unknown artist", album.year?.toString()).joinToString(" · "),
                 onSubtitle = album.artist?.let { a -> { c.st.openArtist(a) } },
                 meta = listOfNotNull("Album", "${tracks.size} songs", if (album.videos.isNotEmpty()) "${album.videos.size} video${if (album.videos.size > 1) "s" else ""}" else null, Fmt.dur(album.durationMs)).joinToString(" · "),
                 tracks = tracks,
+                changeArt = "Change album art",
+                onChangeArt = { c.st.sheet = Sheet.Art(album = album.key, artist = null) },
             )
         }
         item { Spacer(Modifier.height(10.dp)) }
@@ -291,8 +298,10 @@ fun ArtistScreen(c: Ctx, name: String) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             DetailHeader(
-                c, name, tracks.firstOrNull()?.let { c.art(it) }, name, subtitle = "Artist", onSubtitle = null,
+                c, name, c.artistArt(name), name, subtitle = "Artist", onSubtitle = null,
                 meta = "Artist · ${tracks.size} songs · ${albums.size} album${if (albums.size != 1) "s" else ""}", tracks = tracks, round = true,
+                changeArt = "Change artist picture",
+                onChangeArt = { c.st.sheet = Sheet.Art(album = null, artist = name) },
             )
         }
         if (albums.isNotEmpty()) {
