@@ -47,6 +47,8 @@ data class Settings(
     val phoneFoldersChosen: Boolean = false,
     /** Look lyrics up on LRCLIB when a song has no .lrc file. */
     val onlineLyrics: Boolean = true,
+    /** Look up posters/summaries online (iTunes, TVmaze) for movies and shows that are only on the phone. */
+    val onlineVideoInfo: Boolean = true,
     /** Chosen sort for each library tab. */
     val sorts: Map<com.amosley.signal.core.SortTab, com.amosley.signal.core.SortPref> = emptyMap(),
 )

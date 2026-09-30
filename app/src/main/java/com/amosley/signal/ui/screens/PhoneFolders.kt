@@ -125,6 +125,10 @@ fun SettingsScreen(c: Ctx) {
                     "Find lyrics online",
                     "When a song has no .lrc file, look up time-synced lyrics on LRCLIB (free, no account). Uses the song's title, artist and length.",
                 ) { Toggle(c.settings.onlineLyrics) { v -> c.repo.updateSettings { it.copy(onlineLyrics = v) } } }
+                SettingRow(
+                    "Find movie & TV details online",
+                    "For videos only on this phone: posters and summaries from Apple TV (movies) and TVmaze (shows). Titles in your PC's Plex library use Plex instead.",
+                ) { Toggle(c.settings.onlineVideoInfo) { v -> c.repo.updateSettings { it.copy(onlineVideoInfo = v) }; if (v) c.repo.enrichPhoneVideos() } }
                 Spacer(Modifier.height(16.dp))
                 Mono("Folders on this phone", color = C.Muted)
                 Spacer(Modifier.height(6.dp))

@@ -3,6 +3,19 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.10] - 2026-09-30
+
+### Posters and details for movies and shows on your phone
+- Movies and TV shows stored only on your phone now get a poster, summary, year, genre and rating automatically:
+  - **Movies** come from Apple's movie catalog (the Apple TV store).
+  - **TV shows** come from **TVmaze**, including episode titles, summaries and stills.
+  - Neither needs an account.
+- If the same title is in your PC's Plex library, Plex's details are still used first, and the file plays from the phone.
+- Wrong title? Open the movie or show and tap **Fix match** (or **Find details**). Search by name and pick the right one,
+  or choose **Use the file name instead**.
+- Details are saved on the phone, so each title is only looked up once.
+- Turn this off in **Settings → Find movie & TV details online**.
+
 ## [1.0.9] - 2026-09-30
 
 ### Signal Agent updates install reliably

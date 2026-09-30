@@ -84,3 +84,33 @@ class PhoneFolderTreeTest {
         assertEquals(2010, out.movies.single().year)
     }
 }
+
+class OnlineVideoInfoTest {
+    @Test fun parsesItunesAndPicksByTitleAndYear() {
+        val json = """{"resultCount":2,"results":[
+          {"trackName":"Minions & Monsters","artistName":"Pierre Coffin","releaseDate":"2026-07-01T07:00:00Z","primaryGenreName":"Kids & Family",
+           "contentAdvisoryRating":"PG","longDescription":"This is the rambunctious...","artworkUrl100":"https://is1-ssl.mzstatic.com/image/thumb/Video/x/100x100bb.jpg","trackTimeMillis":5340000},
+          {"trackName":"Monsters, Inc.","releaseDate":"2001-11-02T08:00:00Z"}]}"""
+        val all = com.amosley.signal.data.OnlineVideoInfo.parseItunes(json)
+        assertEquals(2, all.size)
+        val m = com.amosley.signal.data.OnlineVideoInfo.pickMovie(all, "Minions and Monsters", 2026)!!
+        assertEquals("Pierre Coffin", m.director)
+        assertEquals("https://is1-ssl.mzstatic.com/image/thumb/Video/x/600x900bb.jpg", m.posterUrl)
+        assertEquals(null, com.amosley.signal.data.OnlineVideoInfo.pickMovie(all, "Minions and Monsters", 2010))
+    }
+
+    @Test fun parsesTvmazeShowWithEpisodes() {
+        val json = """{"id":1,"name":"The Ballast","premiered":"2024-01-05","summary":"<p>Sea &amp; sky.</p>","genres":["Drama"],
+          "rating":{"average":8.1},"image":{"medium":"m.jpg","original":"o.jpg"},
+          "_embedded":{"episodes":[{"season":1,"number":1,"name":"Pilot","summary":"<p>Start</p>","runtime":45,"image":{"medium":"e1.jpg"}}]}}"""
+        val s = com.amosley.signal.data.OnlineVideoInfo.parseTvmazeShowJson(json)!!
+        assertEquals("Sea & sky.", s.synopsis)
+        assertEquals(2024, s.year)
+        assertEquals("Pilot", s.episodes.single().title)
+        assertEquals(45 * 60_000L, s.episodes.single().durationMs)
+        val phone = Show("locs:ballast", "The Ballast", seasons = listOf(Season(1, listOf(Episode("locv:9", 1, 1, "the ballast s01e01")))))
+        val out = com.amosley.signal.data.OnlineVideoInfo.apply(phone, s)
+        assertEquals("Pilot", out.seasons.single().episodes.single().title)
+        assertEquals("o.jpg", out.posterUrl)
+    }
+}

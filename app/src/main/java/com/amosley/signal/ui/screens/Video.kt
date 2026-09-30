@@ -125,15 +125,22 @@ fun Context.findActivity(): Activity? {
 // ---- Movie detail -------------------------------------------------------------------------------
 
 @Composable
-private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: String?) {
+private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: String?, phoneFix: (() -> Unit)? = null) {
     Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         certificate?.let { Chip(it, bg = Color.Transparent, fg = C.Fg, border = C.HairStrong) }
         rating?.let { Chip("★ ${"%.1f".format(it)}", bg = C.AmberTint, fg = C.AmberText) }
-        matchedBy?.takeIf { it != "ON THIS PHONE" }?.let { Mono("Matched by $it", style = T.metaMono, color = C.Faint) }
-        if (matchedBy == "ON THIS PHONE") {
-            Mono("Not found in your Plex library · add it there to get its poster and details", style = T.metaMono, color = C.Faint)
-        } else if (matchedBy != null && matchedBy.startsWith("PLEX")) {
-            Mono("Wrong movie? Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable {
+        val source = when (matchedBy) {
+            "ON THIS PHONE" -> null
+            "ITUNES" -> "Details from Apple TV"
+            "TVMAZE" -> "Details from TVmaze"
+            null -> null
+            else -> "Matched by $matchedBy"
+        }
+        source?.let { Mono(it, style = T.metaMono, color = C.Faint) }
+        when {
+            phoneFix != null -> Mono(if (matchedBy == "ON THIS PHONE") "Find details" else "Wrong title? Fix match", style = T.metaMono, color = C.AmberText,
+                modifier = Modifier.clickable(onClick = phoneFix))
+            matchedBy != null && matchedBy.startsWith("PLEX") -> Mono("Wrong title? Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable {
                 c.toast("Use Fix Match on this title in Plex, then Sync now in Signal")
             })
         }
@@ -191,7 +198,8 @@ fun MovieScreen(c: Ctx, id: String) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                MetaRow(c, m.certificate, m.rating, m.matchedBy)
+                MetaRow(c, m.certificate, m.rating, m.matchedBy,
+                    phoneFix = if (m.id.startsWith("locv:")) ({ c.st.sheet = Sheet.FixMatch(movieId = m.id, showKey = null) }) else null)
                 m.synopsis?.let {
                     Spacer(Modifier.height(14.dp))
                     Text(it, style = T.ui(14.5.sp, lineHeight = 22.sp), color = C.Fg.copy(alpha = 0.85f))
@@ -245,7 +253,8 @@ fun ShowScreen(c: Ctx, id: String) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                MetaRow(c, show.certificate, show.rating, show.matchedBy)
+                MetaRow(c, show.certificate, show.rating, show.matchedBy,
+                    phoneFix = if (show.id.startsWith("locs:")) ({ c.st.sheet = Sheet.FixMatch(movieId = null, showKey = show.id) }) else null)
                 show.synopsis?.let {
                     Spacer(Modifier.height(12.dp))
                     Text(it, style = T.ui(14.5.sp, lineHeight = 22.sp), color = C.Fg.copy(alpha = 0.85f))

@@ -128,7 +128,9 @@ class AgentClient(private val http: OkHttpClient) {
     companion object {
         /** Media URLs carry the token as a query parameter so Cast / Sonos receivers can fetch them too. */
         fun mediaUrl(base: String, token: String, path: String): String {
-            val full = if (path.startsWith("http")) path else base.trimEnd('/') + path
+            // Absolute URLs are artwork from online sources (Apple, TVmaze): never send them our token.
+            if (path.startsWith("http://") || path.startsWith("https://")) return path
+            val full = base.trimEnd('/') + path
             return full.toHttpUrl().newBuilder().addQueryParameter("token", token).build().toString()
         }
     }

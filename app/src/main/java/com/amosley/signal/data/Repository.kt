@@ -100,6 +100,8 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     private val editsStore = JsonStore(File(files, "track-edits.json"), MapSerializer(String.serializer(), TrackEdit.serializer())) { emptyMap() }
     private val favoritesStore = JsonStore(File(files, "favorites.json"), SetSerializer(String.serializer())) { emptySet() }
     private val progressStore = JsonStore(File(files, "watch-progress.json"), MapSerializer(String.serializer(), WatchProgress.serializer())) { emptyMap() }
+    private val movieInfoStore = JsonStore(File(files, "movie-info.json"), MapSerializer(String.serializer(), MovieInfo.serializer())) { emptyMap() }
+    private val showInfoStore = JsonStore(File(files, "show-info.json"), MapSerializer(String.serializer(), ShowInfo.serializer())) { emptyMap() }
     private val playlistsStore = JsonStore(File(files, "playlists.json"), ListSerializer(UserPlaylist.serializer())) { emptyList() }
     private val conflictsStore = JsonStore(File(files, "conflicts.json"), ListSerializer(TagConflict.serializer())) { emptyList() }
     private val tagJobsStore = JsonStore(File(files, "tag-jobs.json"), ListSerializer(TagJob.serializer())) { emptyList() }
@@ -119,6 +121,9 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     /** Track ids marked as favourites (heart). */
     val favorites: StateFlow<Set<String>> = _favorites
     private val _progress = MutableStateFlow(progressStore.load())
+    /** Online details for phone-only videos: phone video id → movie, normalised show name → show. */
+    private val _movieInfo = MutableStateFlow(movieInfoStore.load())
+    private val _showInfo = MutableStateFlow(showInfoStore.load())
     private val _playlists = MutableStateFlow(playlistsStore.load())
     val playlists: StateFlow<List<UserPlaylist>> = _playlists
     private val _conflicts = MutableStateFlow(conflictsStore.load())
@@ -155,11 +160,14 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     val library: StateFlow<LibraryView> = combine(
         combine(_catalog, _localTracks, _localVideos) { c, lt, lv -> Triple(c, lt, lv) },
         combine(_overrides, _edits, _progress) { o, e, pr -> Triple(o, e, pr) }, _settings, downloads.states,
-    ) { (cat, localTracks, localVideos), (overrides, edits, progress), settings, dl ->
-        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits, progress)
+        combine(_movieInfo, _showInfo) { m, sh -> m to sh },
+    ) { (cat, localTracks, localVideos), (overrides, edits, progress), settings, dl, (movieInfo, showInfo) ->
+        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits, progress, movieInfo, showInfo)
     }.stateIn(scope, SharingStarted.Eagerly, LibraryView())
 
-    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap(), progress: Map<String, WatchProgress> = emptyMap()): LibraryView {
+    private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap(), progress: Map<String, WatchProgress> = emptyMap(),
+        movieInfo: Map<String, MovieInfo> = emptyMap(), showInfo: Map<String, ShowInfo> = emptyMap(),
+    ): LibraryView {
         val enabledLibs = s.libModes.keys
         fun libOk(id: String?) = id == null || enabledLibs.isEmpty() || id in enabledLibs
         fun avail(id: String, origin: Origin) = !s.offline || origin == Origin.PHONE || (id in dlKeys && downloads.isDownloaded(id))
@@ -174,8 +182,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         val pcMovies = cat.movies.filter { libOk(it.libraryId) }
         val movies = PhoneMatch.movies(pcMovies, phone.movies)
             .filter { it.origin == Origin.PHONE || avail(it.id, Origin.PC) }
+            // Not in the PC library: use details found online (if any).
+            .map { m -> if (m.id.startsWith("locv:")) movieInfo[m.id]?.let { OnlineVideoInfo.apply(m, it) } ?: m else m }
             .map { Watching.applyLocal(it, progress[it.id]) }
-        val shows = PhoneMatch.shows(cat.shows.filter { libOk(it.libraryId) }, phone.shows).map { sh ->
+        val shows = PhoneMatch.shows(cat.shows.filter { libOk(it.libraryId) }, phone.shows)
+            .map { sh -> if (sh.id.startsWith("locs:")) showInfo[com.amosley.signal.core.VideoNames.norm(sh.title)]?.let { OnlineVideoInfo.apply(sh, it) } ?: sh else sh }
+            .map { sh ->
             sh.copy(seasons = sh.seasons.map { se -> se.copy(episodes = se.episodes.map { Watching.applyLocal(it, progress[it.id]) }) })
         }.mapNotNull { show ->
             if (!s.offline) show else show.copy(seasons = show.seasons.map { se -> se.copy(episodes = se.episodes.filter { it.uri.isNotEmpty() || downloads.isDownloaded(it.id) }) }.filter { it.episodes.isNotEmpty() })
@@ -206,8 +218,63 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         scope.launch(Dispatchers.IO) {
             _localTracks.value = scanner.scanAudio(null)
             _localVideos.value = scanner.scanVideos()
+            enrichPhoneVideos()
         }
     }
+
+    // ---- Online details for phone-only movies and shows ----------------------------------------
+
+    private val onlineVideo = OnlineVideoInfo(http)
+    private val videoMisses = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val enrichLock = Mutex()
+
+    /** Look up movies/shows that are only on the phone (not matched to the PC) once, and remember the result. */
+    fun enrichPhoneVideos() {
+        scope.launch(Dispatchers.IO) {
+            enrichLock.withLock {
+                val s = _settings.value
+                if (!s.onlineVideoInfo || s.offline) return@withLock
+                delay(1500) // let the library settle after a scan
+                val view = library.value
+                for (m in view.movies.filter { it.id.startsWith("locv:") && it.id !in _movieInfo.value && it.id !in videoMisses }) {
+                    val found = runCatching { onlineVideo.findMovie(m.title, m.year) }.getOrNull()
+                    if (found == null) videoMisses += m.id else setMovieInfo(m.id, found)
+                    delay(300)
+                }
+                for (sh in view.shows.filter { it.id.startsWith("locs:") && it.matchedBy != "TVMAZE" }) {
+                    val key = com.amosley.signal.core.VideoNames.norm(sh.title)
+                    if (key in _showInfo.value || key in videoMisses) continue
+                    val found = runCatching { onlineVideo.findShow(sh.title) }.getOrNull()
+                    if (found == null) videoMisses += key else setShowInfo(key, found)
+                    delay(300)
+                }
+            }
+        }
+    }
+
+    fun setMovieInfo(phoneId: String, info: MovieInfo?) {
+        _movieInfo.update { if (info == null) it - phoneId else it + (phoneId to info) }
+        if (info == null) videoMisses += phoneId
+        movieInfoStore.save(_movieInfo.value)
+    }
+
+    fun setShowInfo(key: String, info: ShowInfo?) {
+        _showInfo.update { if (info == null) it - key else it + (key to info) }
+        if (info == null) videoMisses += key
+        showInfoStore.save(_showInfo.value)
+    }
+
+    /** The phone video's own name, before online details were applied (for Fix match). */
+    fun phoneVideoName(id: String): Pair<String, Int?>? = _localVideos.value.firstOrNull { it.id == id }?.let { it.title to it.year }
+
+    /** A phone show's name from its files (before online details), by its "locs:" id. */
+    fun phoneShowName(id: String): String? =
+        PhoneLibrary.split(emptyList(), _localVideos.value, _settings.value.phoneFolders).shows.firstOrNull { it.id == id }?.title
+
+    suspend fun searchMovies(q: String) = onlineVideo.searchMovies(q)
+    suspend fun searchShows(q: String) = onlineVideo.searchShows(q)
+    suspend fun showDetails(picked: ShowInfo): ShowInfo =
+        picked.source.removePrefix("TVMAZE:").toLongOrNull()?.let { runCatching { onlineVideo.showById(it) }.getOrNull() } ?: picked
 
     // ---- PC connection --------------------------------------------------------------------------
 
@@ -256,6 +323,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             metaStore.save(meta)
             _status.update { it.copy(lastSync = meta.lastSync, error = null) }
             applyLibraryRules(cat)
+            enrichPhoneVideos()
             flushTagJobs()
             uploadPhoneOnly(cat)
             _remoteActivity.value = runCatching { agent.activity(base, p.token) }.getOrDefault(emptyList())
@@ -308,6 +376,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     private fun base(): String? = _status.value.baseUrl ?: pc?.lanUrl
 
     fun remoteUrl(path: String): String? {
+        if (path.startsWith("http://") || path.startsWith("https://")) return path
         val p = pc ?: return null
         val b = base() ?: return null
         return AgentClient.mediaUrl(b, p.token, path)

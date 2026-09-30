@@ -52,6 +52,8 @@ sealed interface Sheet {
     data class LyricsEditor(val trackId: String) : Sheet
     /** Pick or generate art for an album (key) or an artist (name). */
     data class Art(val album: String?, val artist: String?) : Sheet
+    /** Search online details for a phone movie (movieId) or phone show (showKey = its id). */
+    data class FixMatch(val movieId: String?, val showKey: String?) : Sheet
 }
 
 /** UI navigation state. Library data lives in the Repository; playback in PlayerHub. */
