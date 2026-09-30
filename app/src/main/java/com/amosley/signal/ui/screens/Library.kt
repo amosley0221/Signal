@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import com.amosley.signal.core.SortKey
 import com.amosley.signal.ui.components.AlphaRail
 import com.amosley.signal.ui.components.JumpIndex
+import com.amosley.signal.ui.components.RailMode
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -173,21 +174,41 @@ fun LibraryPane(c: Ctx) {
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
-        if (alphaRailOn(c, section)) AlphaRail(listState, jump)
+        railMode(c, section)?.let { AlphaRail(listState, jump, it) }
     }
 }
 
-/** Show the A–Z strip only for long lists sorted by a name. */
-private fun alphaRailOn(c: Ctx, section: Section): Boolean = when (section) {
-    Section.MUSIC -> when (c.st.tab) {
-        MusicTab.SONGS -> sortPref(c, SortTab.SONGS).key in setOf(SortKey.TITLE, SortKey.ARTIST, SortKey.ALBUM) && c.lib.tracks.size > 40
-        MusicTab.ALBUMS -> sortPref(c, SortTab.ALBUMS).key in setOf(SortKey.TITLE, SortKey.ARTIST) && c.lib.albums.size > 24
-        MusicTab.ARTISTS -> sortPref(c, SortTab.ARTISTS).key == SortKey.TITLE && c.lib.artists.size > 30
-        else -> false
+/** The right-edge strip for long lists: A–Z letters when sorted by a name, a scrub bar for other sorts. */
+private fun railMode(c: Ctx, section: Section): RailMode? {
+    val names = setOf(SortKey.TITLE, SortKey.ARTIST, SortKey.ALBUM)
+    fun mode(tab: SortTab, size: Int, min: Int) = when {
+        size <= min -> null
+        sortPref(c, tab).key in names -> RailMode.LETTERS
+        else -> RailMode.SCRUB
     }
-    Section.MOVIES -> sortPref(c, SortTab.MOVIES).key == SortKey.TITLE && c.lib.movies.size > 30
-    Section.TV -> sortPref(c, SortTab.SHOWS).key == SortKey.TITLE && c.lib.shows.size > 30
-    Section.SETTINGS -> false
+    return when (section) {
+        Section.MUSIC -> when (c.st.tab) {
+            MusicTab.SONGS -> mode(SortTab.SONGS, c.lib.tracks.size, 40)
+            MusicTab.ALBUMS -> mode(SortTab.ALBUMS, c.lib.albums.size, 24)
+            MusicTab.ARTISTS -> mode(SortTab.ARTISTS, c.lib.artists.size, 30)
+            else -> null
+        }
+        Section.MOVIES -> mode(SortTab.MOVIES, c.lib.movies.size, 30)
+        Section.TV -> mode(SortTab.SHOWS, c.lib.shows.size, 30)
+        Section.SETTINGS -> null
+    }
+}
+
+private val monthFmt = java.text.SimpleDateFormat("MMM yyyy", java.util.Locale.getDefault())
+
+/** Scrub-bar bubble for one item under a non-name sort. */
+private fun bubbleFor(key: SortKey, addedAt: Long, year: Int?, rating: Double?, durationMs: Long, songs: Int? = null): String? = when (key) {
+    SortKey.ADDED -> if (addedAt > 0) monthFmt.format(java.util.Date(addedAt)) else null
+    SortKey.YEAR -> year?.toString() ?: "No year"
+    SortKey.RATING -> rating?.let { String.format(java.util.Locale.ROOT, "%.1f", it) } ?: "Not rated"
+    SortKey.DURATION -> if (durationMs > 0) Fmt.runtime(durationMs) else null
+    SortKey.SONGS -> songs?.let { "$it song${if (it != 1) "s" else ""}" }
+    else -> null
 }
 
 /** An item that comes before the sorted rows, counted so the A–Z strip knows where the rows start. */
@@ -352,7 +373,10 @@ private fun LazyListScope.songs(c: Ctx, jump: JumpIndex) {
         }
     }
     counted(jump) { SortBar(c, SortTab.SONGS, Modifier.padding(top = 8.dp)) }
-    jump.mark(all.map { t -> when (pref.key) { SortKey.ARTIST -> t.artist; SortKey.ALBUM -> t.album; else -> t.title } })
+    jump.mark(
+        all.map { t -> when (pref.key) { SortKey.ARTIST -> t.artist; SortKey.ALBUM -> t.album; else -> t.title } },
+        bubbles = all.map { bubbleFor(pref.key, it.addedAt, it.year, null, it.durationMs) },
+    )
     songRows(c, all, "songs")
 }
 
@@ -382,15 +406,19 @@ private fun LazyListScope.albums(c: Ctx, jump: JumpIndex) {
     counted(jump) { SortBar(c, SortTab.ALBUMS) }
     val pref = sortPref(c, SortTab.ALBUMS)
     val list = Sorting.albums(c.lib.albums, pref)
-    jump.mark(list.map { if (pref.key == SortKey.ARTIST) it.artist else it.title }, perRow = ALBUM_COLS)
+    jump.mark(
+        list.map { if (pref.key == SortKey.ARTIST) it.artist else it.title }, perRow = ALBUM_COLS,
+        bubbles = list.map { a -> bubbleFor(pref.key, a.tracks.maxOfOrNull { it.addedAt } ?: 0, a.year, null, 0) },
+    )
     albumGrid(c, list, "albums")
 }
 
 private fun LazyListScope.artists(c: Ctx, jump: JumpIndex) {
     counted(jump) { SortBar(c, SortTab.ARTISTS, Modifier.padding(top = 10.dp)) }
-    val newest = HashMap<String, Long>().apply { c.lib.tracks.forEach { t -> t.artist?.let { a -> if (t.addedAt > (this[a] ?: 0)) this[a] = t.addedAt } } }
-    val list = Sorting.artists(c.lib.artists, newest, sortPref(c, SortTab.ARTISTS))
-    jump.mark(list.map { it.first })
+    val newest = HashMap<String, Long>().apply { c.lib.tracks.forEach { t -> (c.lib.artistOf[t.id] ?: t.artist)?.let { a -> if (t.addedAt > (this[a] ?: 0)) this[a] = t.addedAt } } }
+    val apref = sortPref(c, SortTab.ARTISTS)
+    val list = Sorting.artists(c.lib.artists, newest, apref)
+    jump.mark(list.map { it.first }, bubbles = list.map { (name, n) -> bubbleFor(apref.key, newest[name] ?: 0, null, null, 0, n) })
     items(list, key = { "artist-${it.first}" }) { (name, n) ->
         Row(Modifier.fillMaxWidth().clickable { c.st.openArtist(name) }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Art(name, c.artistArt(name), Modifier.size(56.dp), shape = CircleShape)
@@ -510,7 +538,8 @@ private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
     counted(jump) { SectionLabel("All movies", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
     counted(jump) { SortBar(c, SortTab.MOVIES) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
-    jump.mark(list.map { it.title }, perRow = POSTER_COLS)
+    val mpref = sortPref(c, SortTab.MOVIES)
+    jump.mark(list.map { it.title }, perRow = POSTER_COLS, bubbles = list.map { bubbleFor(mpref.key, it.addedAt, it.year, it.rating, it.durationMs) })
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val mv = list[i]
         Column(m.clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
@@ -538,7 +567,8 @@ private fun LazyListScope.shows(c: Ctx, jump: JumpIndex) {
     counted(jump) { SectionLabel("All shows", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
     counted(jump) { SortBar(c, SortTab.SHOWS) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
-    jump.mark(list.map { it.title }, perRow = POSTER_COLS)
+    val spref = sortPref(c, SortTab.SHOWS)
+    jump.mark(list.map { it.title }, perRow = POSTER_COLS, bubbles = list.map { bubbleFor(spref.key, it.addedAt, it.year, it.rating, 0) })
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val sh = list[i]
         Column(m.clickable { c.st.season = null; c.st.push(Screen.ShowPage(sh.id)) }) {

@@ -3,6 +3,14 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.23] - 2026-09-30
+
+### Fast scrolling in every sort
+- Long lists now always have a strip on the right edge, whatever the sort. This includes Movies and TV Shows, which are sorted by Date added unless you change them.
+  - Sorted by name, artist or album: the A–Z letters, as before.
+  - Sorted by Date added, Year, Rating, Length or Most songs: a scrub bar. Drag it to move through the list, and a bubble shows where you are, such as "Mar 2025", "2019", "8.1" or "1h 52m". The amber thumb shows your position in the list.
+- Sorting artists by Date added now also counts songs where they are the main artist with featured guests.
+
 ## [1.0.22] - 2026-09-30
 
 ### Continue Watching matches Plex
