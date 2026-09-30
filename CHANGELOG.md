@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.42] - 2026-10-01
+
+- **Sonos group volume fixed.** With rooms grouped, a volume button press could make one room jump down (e.g. Office 24 → 8) while another barely moved. Signal now asks the group to note each room's share before every change, as Sonos requires. Volume button presses now nudge the whole group up or down together, keeping each room's level relative to the others, and the slider shows the group's real new volume.
+- The group volume is re-read after grouping or ungrouping, and fast button presses are sent one at a time.
+
 ## [1.0.41] - 2026-10-01
 
 ### Sonos groups

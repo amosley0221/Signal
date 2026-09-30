@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 
 data class PlayerUi(
     val current: Track? = null,
@@ -58,6 +59,8 @@ interface RemoteOutput {
     val supportsVolume: Boolean get() = false
     suspend fun setVolume(volume: Int) {}
     suspend fun volume(): Int? = null
+    /** Relative change (volume buttons); returns the new volume if known. */
+    suspend fun adjustVolume(delta: Int): Int? { val v = (volume() ?: return null) + delta; setVolume(v.coerceIn(0, 100)); return v.coerceIn(0, 100) }
 }
 
 data class RemoteItem(val url: String, val title: String, val artist: String?, val album: String?, val artUrl: String?, val mime: String, val durationMs: Long, val isVideo: Boolean = false)
@@ -325,13 +328,39 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     )
     private fun remoteVolumeActive() = remote?.supportsVolume == true
 
-    /** Sets the speaker volume (from the Play on slider or the phone's buttons) and tells Android's volume panel. */
+    /** Volume requests go to the speaker one at a time (fast button presses would otherwise race). */
+    private val volumeLock = kotlinx.coroutines.sync.Mutex()
+
+    private fun showRemoteVolume(v: Int) {
+        _remoteVolume.value = v.coerceIn(0, 100)
+        sessionListeners.forEach { it.onDeviceVolumeChanged(_remoteVolume.value, false) }
+    }
+
+    /** Sets the speaker volume (from the Play on slider) and tells Android's volume panel. */
     fun setRemoteVolume(volume: Int, send: Boolean = true) {
         val v = volume.coerceIn(0, 100)
-        _remoteVolume.value = v
-        sessionListeners.forEach { it.onDeviceVolumeChanged(v, false) }
+        showRemoteVolume(v)
         val r = remote ?: return
-        if (send && r.supportsVolume) scope.launch { runCatching { r.setVolume(v) } }
+        if (send && r.supportsVolume) scope.launch { volumeLock.withLock { runCatching { r.setVolume(v) } } }
+    }
+
+    /** Volume buttons: nudge the speaker (a Sonos group keeps each room's share), then show its real new volume. */
+    fun adjustRemoteVolume(delta: Int) {
+        val r = remote ?: return
+        if (!r.supportsVolume) return
+        showRemoteVolume(_remoteVolume.value + delta)
+        scope.launch {
+            volumeLock.withLock {
+                runCatching { r.adjustVolume(delta) }.getOrNull()?.let { if (remote === r) showRemoteVolume(it) }
+            }
+        }
+    }
+
+    /** Re-read the speaker's volume (after grouping changes, rooms' levels combine differently). */
+    fun refreshRemoteVolume() {
+        val r = remote ?: return
+        if (!r.supportsVolume) return
+        scope.launch { volumeLock.withLock { runCatching { r.volume() }.getOrNull()?.let { if (remote === r) showRemoteVolume(it) } } }
     }
 
     private fun notifyDeviceChanged() {
@@ -385,14 +414,14 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         @Deprecated("Deprecated in Java")
         @Suppress("DEPRECATION")
         override fun setDeviceVolume(volume: Int) { if (remoteVolumeActive()) setRemoteVolume(volume) else super.setDeviceVolume(volume) }
-        override fun increaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value + VOLUME_STEP) else super.increaseDeviceVolume(flags) }
+        override fun increaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) adjustRemoteVolume(VOLUME_STEP) else super.increaseDeviceVolume(flags) }
         @Deprecated("Deprecated in Java")
         @Suppress("DEPRECATION")
-        override fun increaseDeviceVolume() { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value + VOLUME_STEP) else super.increaseDeviceVolume() }
-        override fun decreaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value - VOLUME_STEP) else super.decreaseDeviceVolume(flags) }
+        override fun increaseDeviceVolume() { if (remoteVolumeActive()) adjustRemoteVolume(VOLUME_STEP) else super.increaseDeviceVolume() }
+        override fun decreaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) adjustRemoteVolume(-VOLUME_STEP) else super.decreaseDeviceVolume(flags) }
         @Deprecated("Deprecated in Java")
         @Suppress("DEPRECATION")
-        override fun decreaseDeviceVolume() { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value - VOLUME_STEP) else super.decreaseDeviceVolume() }
+        override fun decreaseDeviceVolume() { if (remoteVolumeActive()) adjustRemoteVolume(-VOLUME_STEP) else super.decreaseDeviceVolume() }
     }
 
     fun setRemote(output: RemoteOutput?) {

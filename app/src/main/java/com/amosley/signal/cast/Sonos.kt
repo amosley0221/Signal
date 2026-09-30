@@ -343,9 +343,28 @@ class SonosController(private val context: Context, private val http: OkHttpClie
 
     suspend fun leave(member: SonosRoom) = av(member, "BecomeCoordinatorOfStandaloneGroup")
 
+    /**
+     * Sonos needs a snapshot of each room's share of the group volume before the group volume changes; without it,
+     * rooms move by stale proportions (e.g. one room dropping from 24 to 8 while another only drops to 21).
+     */
+    private suspend fun snapshotGroupVolume(coordinator: SonosRoom) {
+        runCatching {
+            soap(coordinator, "/MediaRenderer/GroupRenderingControl/Control", "GroupRenderingControl", "SnapshotGroupVolume", listOf("InstanceID" to "0"))
+        }
+    }
+
     suspend fun setGroupVolume(coordinator: SonosRoom, volume: Int) {
+        snapshotGroupVolume(coordinator)
         soap(coordinator, "/MediaRenderer/GroupRenderingControl/Control", "GroupRenderingControl", "SetGroupVolume",
             listOf("InstanceID" to "0", "DesiredVolume" to volume.coerceIn(0, 100).toString()))
+    }
+
+    /** Nudges the whole group up/down, keeping each room's level relative to the others. Returns the new group volume. */
+    suspend fun adjustGroupVolume(coordinator: SonosRoom, delta: Int): Int? {
+        snapshotGroupVolume(coordinator)
+        val xml = soap(coordinator, "/MediaRenderer/GroupRenderingControl/Control", "GroupRenderingControl", "SetRelativeGroupVolume",
+            listOf("InstanceID" to "0", "Adjustment" to delta.toString()))
+        return Regex("<NewVolume>(\\d+)</NewVolume>").find(xml)?.groupValues?.get(1)?.toIntOrNull()
     }
 
     /** One speaker's own volume (within a group, each room keeps its own level). */
@@ -459,6 +478,7 @@ class SonosOutput(
     override val supportsVolume: Boolean get() = true
     override suspend fun setVolume(volume: Int) = sonos.setGroupVolume(room, volume)
     override suspend fun volume(): Int? = sonos.groupVolume(room)
+    override suspend fun adjustVolume(delta: Int): Int? = sonos.adjustGroupVolume(room, delta) ?: sonos.groupVolume(room)
 
     override fun release() {
         poll?.cancel()

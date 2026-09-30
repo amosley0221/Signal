@@ -650,7 +650,12 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                     groupRooms.forEach { r -> RoomVolume(c, r) }
                     Spacer(Modifier.height(6.dp))
                 }
-                LaunchedEffect(c.st.sonosGroup.size) { app.hub.setGroupExtra(c.st.sonosGroup.size) }
+                LaunchedEffect(c.st.sonosGroup.size) {
+                    app.hub.setGroupExtra(c.st.sonosGroup.size)
+                    // The group's volume is the average of its rooms: re-read it after grouping changes.
+                    kotlinx.coroutines.delay(500)
+                    app.hub.refreshRemoteVolume()
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (c.st.sonosGroup.isNotEmpty()) OutlineBtn("Ungroup all") {
                         scope.safeLaunch {
