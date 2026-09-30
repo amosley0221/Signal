@@ -407,7 +407,9 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     fun streamUrl(id: String): String? = remoteUrl("/api/stream/$id")
-    fun artUrl(id: String, kind: String = "cover"): String? = remoteUrl("/api/art/$id?kind=$kind")
+    /** [version] (the song file's mtime) changes the URL when the file changes, so cached covers can be kept for good. */
+    fun artUrl(id: String, kind: String = "cover", version: Long = 0): String? =
+        remoteUrl("/api/art/$id?kind=$kind" + if (version > 0) "&v=$version" else "")
     private fun downloadUrl(id: String, quality: String): String? = remoteUrl("/api/download/$id?quality=$quality")
     fun transcodedUrl(id: String): String? = downloadUrl(id, "16-44")
 

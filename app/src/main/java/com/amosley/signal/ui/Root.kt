@@ -92,7 +92,7 @@ class Ctx(
     fun artistArt(name: String): Any? = repo.artistArtFile(name) ?: lib.artistTracks(name).firstOrNull()?.let { art(it) }
 
     private fun fileArt(t: Track): Any? = when (t.origin) {
-        Origin.PC -> if (t.hasArt) repo.artUrl(t.id) else null
+        Origin.PC -> if (t.hasArt) repo.artUrl(t.id, version = t.mtime) else null
         Origin.PHONE -> t.uri.takeIf { it.startsWith("content://") }?.let { "$it/albumart" }
     }
 

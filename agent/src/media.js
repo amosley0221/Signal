@@ -152,6 +152,17 @@ function imageNamed(listing, stems) {
   return null;
 }
 
+/**
+ * Fallback album cover: Windows Media Player's AlbumArt_{GUID}_Large.jpg, or any image whose name suggests a cover,
+ * or the only image in the folder. Folders with many unrelated images are ignored.
+ */
+function anyCover(listing) {
+  const images = [...listing.values()].filter((n) => IMAGE_EXTS.includes(path.extname(n).toLowerCase()));
+  if (!images.length) return null;
+  const pick = (re) => images.find((n) => re.test(n));
+  return pick(/^albumart_.*_large\./i) || pick(/cover|front|folder|album/i) || pick(/^albumart/i) || (images.length === 1 ? images[0] : null);
+}
+
 const LANG_NAMES = (() => {
   try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; }
 })();
@@ -189,7 +200,7 @@ export function findSidecars(fileName, listing, role, ownFolder) {
   if (role === 'audio') {
     out.lrc = listing.get(`${lb}.lrc`) || null;
     out.enLrc = listing.get(`${lb}.en.lrc`) || null;
-    out.art.cover = imageNamed(listing, [base, 'cover', 'folder', 'front', 'album', 'albumart']);
+    out.art.cover = imageNamed(listing, [base, 'cover', 'folder', 'front', 'album', 'albumart', 'albumartlarge']) || anyCover(listing);
     return out;
   }
   if (role === 'musicvideo') {

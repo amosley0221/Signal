@@ -199,8 +199,10 @@ export function createServer(agent) {
   route('GET', '/api/art/:id', async (req, res, p, q) => {
     const a = await agent.catalog.art(p.id, q.get('kind') || 'cover');
     if (!a) return notFound(req, res);
+    // Versioned URLs (?v=<file mtime>) never change content, so phones may keep them for good.
+    const cache = q.get('v') ? 'public, max-age=31536000, immutable' : 'max-age=86400';
     if (a.data) {
-      res.writeHead(200, { 'Content-Type': a.mime, 'Content-Length': a.data.length, 'Cache-Control': 'max-age=3600' });
+      res.writeHead(200, { 'Content-Type': a.mime, 'Content-Length': a.data.length, 'Cache-Control': cache });
       return res.end(a.data);
     }
     if (a.plex) {
@@ -210,7 +212,7 @@ export function createServer(agent) {
         return notFound(req, res);
       }
     }
-    return sendFile(req, res, a.file, { headers: { 'Cache-Control': 'max-age=3600' } });
+    return sendFile(req, res, a.file, { headers: { 'Cache-Control': cache } });
   });
 
   route('GET', '/api/subtitle/:videoId/:subId', (req, res, p) => {

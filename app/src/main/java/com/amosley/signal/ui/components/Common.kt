@@ -90,10 +90,25 @@ fun Art(
         }
     }) {
         if (model != null) {
-            AsyncImage(model = model, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            val context = androidx.compose.ui.platform.LocalContext.current
+            // PC art URLs contain the PC's current address (home or Tailscale) and the token: cache by the rest,
+            // so a cover downloaded once is reused whichever way the phone reaches the PC.
+            val request = remember(model) {
+                val key = (model as? String)?.let(::stableArtKey)
+                if (key == null) model else coil.request.ImageRequest.Builder(context).data(model).diskCacheKey(key).memoryCacheKey(key).build()
+            }
+            AsyncImage(model = request, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         overlay()
     }
+}
+
+/** "/api/art/<id>?kind=cover&v=…" without host and token, or null for other images. */
+private fun stableArtKey(url: String): String? {
+    if (!url.contains("/api/art/")) return null
+    val u = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+    val query = u.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() && !it.startsWith("token=") }.sorted().joinToString("&")
+    return "signal-art:" + u.rawPath + "?" + query
 }
 
 @Composable

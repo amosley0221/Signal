@@ -83,7 +83,9 @@ class SignalApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .okHttpClient { repo.http }
-        .diskCache { DiskCache.Builder().directory(cacheDir.resolve("art")).maxSizeBytes(256L * 1024 * 1024).build() }
+        // Keep covers until they change (their URL changes then), instead of re-downloading them every hour.
+        .diskCache { DiskCache.Builder().directory(cacheDir.resolve("art")).maxSizeBytes(512L * 1024 * 1024).build() }
+        .respectCacheHeaders(false)
         .crossfade(true)
         .build()
 }

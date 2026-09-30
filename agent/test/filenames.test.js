@@ -27,3 +27,12 @@ test('episode: show year folder, dotted scene names, 1x02 and bare files', () =>
   const c = parseEpisodeName('Slow Kitchen/Specials/Slow Kitchen - S00E01 - Behind the Scenes.mkv');
   assert.deepEqual([c.show, c.season, c.episode, c.title], ['Slow Kitchen', 0, 1, 'Behind the Scenes']);
 });
+
+test('album covers are found under common and Windows Media Player names', async () => {
+  const { findSidecars } = await import('../src/media.js');
+  const listing = (names) => new Map(names.map((n) => [n.toLowerCase(), n]));
+  assert.equal(findSidecars('01 Song.flac', listing(['01 Song.flac', 'AlbumArt_{ABC}_Large.jpg', 'AlbumArtSmall.jpg']), 'audio').art.cover, 'AlbumArt_{ABC}_Large.jpg');
+  assert.equal(findSidecars('01 Song.flac', listing(['01 Song.flac', 'Folder.jpg']), 'audio').art.cover, 'Folder.jpg');
+  assert.equal(findSidecars('01 Song.flac', listing(['01 Song.flac', 'scan.png']), 'audio').art.cover, 'scan.png');
+  assert.equal(findSidecars('01 Song.flac', listing(['01 Song.flac', 'a.jpg', 'b.jpg']), 'audio').art.cover, null);
+});

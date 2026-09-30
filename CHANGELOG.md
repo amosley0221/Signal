@@ -3,6 +3,14 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.27] - 2026-10-01
+
+### Album covers load once and stay
+- **App:** covers are kept on the phone until the song file changes. Before, the PC told the phone to keep them for only one hour, so after that every cover was downloaded again. When the PC was busy scanning, many of those downloads failed and showed blank squares.
+- **App:** a cover is reused whether the phone reaches the PC at home or over Tailscale. Before, switching between the two downloaded every cover again. The cover cache on the phone is now 512 MB.
+- **Signal Agent (PC):** covers stored inside song files are extracted once and saved, so they load instantly afterwards. Before, the song file was read again for every cover request.
+- **Signal Agent (PC):** more album covers are found in folders. This includes Windows Media Player's "AlbumArt_…_Large.jpg" files, any image named like a cover, and a folder's only image. Update the agent to get this; the covers show up after its next check for changes.
+
 ## [1.0.26] - 2026-10-01
 
 ### Artists stay separate on combined albums

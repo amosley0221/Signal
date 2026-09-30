@@ -719,16 +719,19 @@ export class Catalog {
     if (it.type === 'track') {
       const e = it.entry;
       if (e.meta?.hasPicture) {
-        const key = `${id}:${e.mtime}`;
-        let c = this.coverCache.get(key);
-        if (!c) {
-          c = await readEmbeddedCover(it.abs);
-          if (c) {
-            this.coverCache.set(key, c);
-            if (this.coverCache.size > 64) this.coverCache.delete(this.coverCache.keys().next().value);
-          }
+        // Covers inside the song file are extracted once and kept on disk (dataDir/covers), so they're served
+        // instantly next time instead of re-reading the song, which is slow while a scan is busy with the disk.
+        const coverDir = path.join(this.config.dataDir, 'covers');
+        const stem = path.join(coverDir, `${id}-${e.mtime}`);
+        for (const ext of ['.jpg', '.png']) {
+          if (fs.existsSync(stem + ext)) return { file: stem + ext };
         }
-        if (c) return c;
+        const c = await readEmbeddedCover(it.abs);
+        if (c) {
+          const ext = /png/i.test(c.mime) ? '.png' : '.jpg';
+          fsp.mkdir(coverDir, { recursive: true }).then(() => fsp.writeFile(stem + ext, c.data)).catch(() => {});
+          return c;
+        }
       }
       return sideFile(e.side?.art?.cover);
     }
