@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.41] - 2026-10-01
+
+### Sonos groups
+- **Per-room volume:** when rooms are grouped, **Play on** shows a slider for each room under the group slider, like the Sonos app. The group slider and the phone's volume buttons still move the whole group together, and the room sliders refresh to match.
+- **Group name:** while grouped, the speaker button, "Playing on" and the mini player read **"Office + 1"** (or + however many rooms are grouped).
+
 ## [1.0.40] - 2026-10-01
 
 - **Sonos volume buttons, take two.** While music plays on a Sonos speaker, the phone's volume buttons now change the speaker's volume whenever Signal is open, and the new volume shows briefly on screen. In 1.0.39 Android kept the buttons on the phone, because Signal's own player was paused while the speaker played.

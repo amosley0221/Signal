@@ -644,6 +644,13 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                     valueRange = 0f..100f,
                     colors = SliderDefaults.colors(thumbColor = C.Amber, activeTrackColor = C.Amber, inactiveTrackColor = C.HairStrong),
                 )
+                // Grouped: each room also gets its own slider (the group slider above moves them all together).
+                val groupRooms = listOf(activeSonos.room) + rooms.filter { it.uuid in c.st.sonosGroup }
+                if (groupRooms.size > 1) {
+                    groupRooms.forEach { r -> RoomVolume(c, r) }
+                    Spacer(Modifier.height(6.dp))
+                }
+                LaunchedEffect(c.st.sonosGroup.size) { app.hub.setGroupExtra(c.st.sonosGroup.size) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (c.st.sonosGroup.isNotEmpty()) OutlineBtn("Ungroup all") {
                         scope.safeLaunch {
@@ -723,5 +730,29 @@ private fun kotlinx.coroutines.CoroutineScope.safeLaunch(block: suspend kotlinx.
         throw e
     } catch (e: Throwable) {
         android.util.Log.e("Signal", "action failed", e)
+    }
+}
+
+/** One room's own volume inside a Sonos group. */
+@Composable
+private fun RoomVolume(c: Ctx, room: com.amosley.signal.cast.SonosRoom) {
+    val app = c.app
+    val scope = rememberCoroutineScope()
+    var v by remember(room.uuid) { mutableStateOf<Int?>(null) }
+    // Re-read after the group slider or the phone's volume buttons move everything.
+    val groupVol by app.hub.remoteVolume.collectAsState()
+    LaunchedEffect(room.uuid, groupVol) {
+        kotlinx.coroutines.delay(400)
+        runCatching { app.sonos.roomVolume(room) }.getOrNull()?.let { v = it }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(room.name, style = T.ui(13.sp, 600), color = C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(110.dp))
+        Slider(
+            value = (v ?: 0).toFloat(), onValueChange = { v = it.roundToInt() },
+            onValueChangeFinished = { v?.let { target -> scope.safeLaunch { app.sonos.setRoomVolume(room, target) } } },
+            valueRange = 0f..100f, enabled = v != null, modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(thumbColor = C.Fg, activeTrackColor = C.Fg.copy(alpha = 0.7f), inactiveTrackColor = C.HairStrong),
+        )
+        Mono(v?.toString() ?: "–", color = C.Muted, modifier = Modifier.width(34.dp).padding(start = 8.dp))
     }
 }

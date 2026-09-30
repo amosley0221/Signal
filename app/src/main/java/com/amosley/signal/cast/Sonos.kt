@@ -348,6 +348,17 @@ class SonosController(private val context: Context, private val http: OkHttpClie
             listOf("InstanceID" to "0", "DesiredVolume" to volume.coerceIn(0, 100).toString()))
     }
 
+    /** One speaker's own volume (within a group, each room keeps its own level). */
+    suspend fun setRoomVolume(room: SonosRoom, volume: Int) {
+        soap(room, "/MediaRenderer/RenderingControl/Control", "RenderingControl", "SetVolume",
+            listOf("InstanceID" to "0", "Channel" to "Master", "DesiredVolume" to volume.coerceIn(0, 100).toString()))
+    }
+
+    suspend fun roomVolume(room: SonosRoom): Int? {
+        val xml = soap(room, "/MediaRenderer/RenderingControl/Control", "RenderingControl", "GetVolume", listOf("InstanceID" to "0", "Channel" to "Master"))
+        return Regex("<CurrentVolume>(\\d+)</CurrentVolume>").find(xml)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
     suspend fun groupVolume(coordinator: SonosRoom): Int? {
         val xml = soap(coordinator, "/MediaRenderer/GroupRenderingControl/Control", "GroupRenderingControl", "GetGroupVolume", listOf("InstanceID" to "0"))
         return Regex("<CurrentVolume>(\\d+)</CurrentVolume>").find(xml)?.groupValues?.get(1)?.toIntOrNull()

@@ -302,6 +302,15 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
 
     val remoteOutput: RemoteOutput? get() = remote
 
+    private var groupExtra = 0
+    /** Rooms grouped with the speaker being played on: shown as "Office + 2" everywhere the output is named. */
+    fun setGroupExtra(n: Int) {
+        val r = remote ?: return
+        if (n == groupExtra) return
+        groupExtra = n
+        _ui.update { it.copy(output = if (n > 0) "${r.name} + $n" else r.name) }
+    }
+
     // ---- Phone volume buttons → speaker volume ----------------------------------------------------
 
     private val _remoteVolume = MutableStateFlow(30)
@@ -403,6 +412,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
             return
         }
         exo.pause()
+        groupExtra = 0
         _ui.update { it.copy(output = output.name, outputKind = output.kind) }
         sendCurrentToRemote(play = wasPlaying || exo.mediaItemCount > 0, startMs = pos)
         var lastPlaying: Boolean? = null
