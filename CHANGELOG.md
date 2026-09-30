@@ -3,6 +3,17 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.8] - 2026-09-30
+
+### Signal Agent re-scans much less
+- Signal Agent remembers everything it has read. On startup, and after an update, it only **checks for new or
+  changed files** ("Check Music for changes"). Songs and videos it already knows aren't read again, and your
+  library is available on the phone immediately from the saved index.
+- When you add, rename or delete files, only **that** folder is checked, a few seconds later.
+- The big "check everything" pass now runs every 6 hours as a safety net (it used to run every 10 minutes).
+  File watching catches changes in between.
+- Plex details are refreshed on full checks only, not on every file change.
+
 ## [1.0.7] - 2026-09-30
 
 ### PC library shows up while it scans (Signal Agent)

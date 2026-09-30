@@ -88,21 +88,37 @@ export class Catalog {
   // ---- scanning -------------------------------------------------------------------------------
 
   /** Start (or queue) an incremental rescan; resolves when the scan finishes. */
-  scan(reason = 'manual') {
-    if (this.scanning) { this.rescanQueued = true; return this.scanning; }
+  /**
+   * @param {string} reason
+   * @param {string[]|null} [libIds] only these libraries (e.g. the one whose files changed); null = all
+   */
+  scan(reason = 'manual', libIds = null) {
+    if (this.scanning) {
+      // Remember what to do next; "all" wins over a list.
+      if (libIds == null || this.queuedLibs === null) this.queuedLibs = null;
+      else this.queuedLibs = [...new Set([...(this.queuedLibs || []), ...libIds])];
+      this.rescanQueued = true;
+      return this.scanning;
+    }
     this.scanning = (async () => {
       try {
-        await this.#scanAll(reason);
+        await this.#scanAll(reason, libIds);
       } finally {
         this.scanning = null;
       }
-      if (this.rescanQueued) { this.rescanQueued = false; await this.scan('queued'); }
+      if (this.rescanQueued) {
+        const next = this.queuedLibs;
+        this.rescanQueued = false;
+        this.queuedLibs = undefined;
+        await this.scan('queued', next ?? null);
+      }
     })();
     return this.scanning;
   }
 
-  async #scanAll(reason) {
-    if (this.plex) {
+  async #scanAll(reason, libIds = null) {
+    // Plex only needs refreshing on full scans, not when one file changed.
+    if (this.plex && libIds == null) {
       const pj = this.activity.add('plex', 'Plex metadata', 'Refreshing from Plex');
       try {
         const r = await this.plex.refresh();
@@ -114,7 +130,11 @@ export class Catalog {
     }
     for (const lib of this.libraries) {
       if (this.stopRequested) break;
-      const job = this.activity.add('scan', `Scan ${lib.name}`, reason === 'startup' ? 'Startup scan' : `Rescan (${reason})`);
+      if (libIds && !libIds.includes(lib.id)) continue;
+      // With a saved index this only looks for new/changed files; unchanged files are not read again.
+      const known = Object.keys(this.cache.libs[lib.id]?.files || {}).length > 0;
+      const label = known ? `Check ${lib.name} for changes` : `Scan ${lib.name}`;
+      const job = this.activity.add('scan', label, reason === 'startup' ? (known ? 'Startup check' : 'First scan') : `Rescan (${reason})`);
       try {
         const r = await this.#scanLibrary(lib, job);
         job.done(`${r.total} files · ${r.parsed} updated · ${r.removed} removed`);
@@ -297,12 +317,19 @@ export class Catalog {
   // ---- watching ---------------------------------------------------------------------------------
 
   startWatching() {
-    const trigger = debounce(() => this.scan('file change').catch(() => {}), 5000);
+    // Only the library whose files changed is re-checked.
+    const changed = new Set();
+    const trigger = debounce(() => {
+      const ids = [...changed];
+      changed.clear();
+      if (ids.length) this.scan('file change', ids).catch(() => {});
+    }, 5000);
     for (const lib of this.libraries) {
       try {
         const w = fs.watch(lib.path, { recursive: true, persistent: false }, (_ev, filename) => {
           const f = String(filename || '');
           if (f.includes('.signal-tmp') || f.includes('.signal-upload')) return;
+          changed.add(lib.id);
           trigger();
         });
         w.on('error', () => {});

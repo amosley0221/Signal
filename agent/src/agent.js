@@ -15,7 +15,9 @@ import { Updater, cleanupOldExe } from './updater.js';
 /* global __SIGNAL_AGENT_VERSION__ -- replaced at build time in the single-executable bundle */
 export const VERSION = (typeof __SIGNAL_AGENT_VERSION__ === 'string' ? __SIGNAL_AGENT_VERSION__ : null)
   || readJsonSync(path.join(AGENT_DIR, 'package.json'), {}).version || '1.0.0';
-const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
+// Folder watching picks up new files right away; this periodic check is only a safety net
+// (e.g. network drives where watching doesn't work).
+const RESCAN_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export class Agent {
   /**
