@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.24] - 2026-09-30
+
+### Sonos grouping no longer crashes the app
+- Fixed a crash when a Sonos speaker refused a request, for example asking a room for its volume right after grouping or ungrouping it. The request now fails quietly and the app keeps going.
+- Every Sonos action in **Play on** (group, ungroup, group all, volume) is now protected the same way, and so are background tasks across the app. A speaker or the PC turning down a request can no longer close Signal.
+
 ## [1.0.23] - 2026-09-30
 
 ### Fast scrolling in every sort

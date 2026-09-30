@@ -603,7 +603,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                 OutputRow(r.name, "${if (r.model.startsWith("Sonos", true)) r.model else "Sonos ${r.model}"} · up to 24-bit / 48 kHz", active || grouped, trailing = {
                     if (activeSonos != null && !active) {
                         GroupToggle(grouped) {
-                            scope.launch {
+                            scope.safeLaunch {
                                 runCatching {
                                     if (grouped) app.sonos.leave(r) else app.sonos.join(r, activeSonos.room)
                                 }.onSuccess {
@@ -617,7 +617,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                     if (c.player.outputKind == OutputKind.CAST) app.cast.disconnect()
                     c.st.sonosGroup = emptySet()
                     app.hub.setRemote(SonosOutput(app.sonos, r, app.scope) { app.toast(it) })
-                    scope.launch { app.sonos.groupVolume(r)?.let { c.st.sonosVolume = it } }
+                    scope.safeLaunch { runCatching { app.sonos.groupVolume(r) }.getOrNull()?.let { c.st.sonosVolume = it } }
                     c.toast("Playing on ${r.name}")
                 }
             }
@@ -636,19 +636,19 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                 Mono("Volume · ${names.joinToString(" + ")}", color = C.Muted)
                 Slider(
                     value = c.st.sonosVolume.toFloat(), onValueChange = { c.st.sonosVolume = it.roundToInt() },
-                    onValueChangeFinished = { scope.launch { runCatching { app.sonos.setGroupVolume(activeSonos.room, c.st.sonosVolume) } } },
+                    onValueChangeFinished = { scope.safeLaunch { runCatching { app.sonos.setGroupVolume(activeSonos.room, c.st.sonosVolume) } } },
                     valueRange = 0f..100f,
                     colors = SliderDefaults.colors(thumbColor = C.Amber, activeTrackColor = C.Amber, inactiveTrackColor = C.HairStrong),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (c.st.sonosGroup.isNotEmpty()) OutlineBtn("Ungroup all") {
-                        scope.launch {
+                        scope.safeLaunch {
                             rooms.filter { it.uuid in c.st.sonosGroup }.forEach { runCatching { app.sonos.leave(it) } }
                             c.st.sonosGroup = emptySet()
                         }
                     }
                     OutlineBtn("Group all rooms") {
-                        scope.launch {
+                        scope.safeLaunch {
                             val others = rooms.filter { it.uuid != activeSonos.room.uuid }
                             others.forEach { runCatching { app.sonos.join(it, activeSonos.room) } }
                             c.st.sonosGroup = others.map { it.uuid }.toSet()
@@ -700,7 +700,7 @@ private fun SonosByIp(c: Ctx) {
             OutlineBtn(if (busy) "Adding…" else "Add") {
                 if (busy || ip.isBlank()) return@OutlineBtn
                 busy = true
-                scope.launch {
+                scope.safeLaunch {
                     c.toast(app.sonos.addByIp(ip))
                     busy = false
                 }
@@ -708,5 +708,16 @@ private fun SonosByIp(c: Ctx) {
         }
         Spacer(Modifier.height(8.dp))
         OutlineBtn("Search again") { app.sonos.discover() }
+    }
+}
+
+/** Like launch, but a failure (a speaker or the PC refusing a request) is logged instead of crashing the app. */
+private fun kotlinx.coroutines.CoroutineScope.safeLaunch(block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) = launch {
+    try {
+        block()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        android.util.Log.e("Signal", "action failed", e)
     }
 }

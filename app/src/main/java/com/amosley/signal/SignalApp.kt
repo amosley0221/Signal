@@ -22,7 +22,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 class SignalApp : Application(), ImageLoaderFactory {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // A failed background task (a speaker or the PC refusing a request) must never take the whole app down.
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        android.util.Log.e("Signal", "background task failed", e)
+    })
     lateinit var repo: Repository
         private set
     lateinit var hub: PlayerHub
