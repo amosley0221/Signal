@@ -64,18 +64,33 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         }
     }
 
-    @Volatile private var lanClient: Pair<Network?, OkHttpClient>? = null
+    private val directClient: OkHttpClient by lazy {
+        http.newBuilder().connectTimeout(2, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS).build()
+    }
+    @Volatile private var boundClient: Pair<Network?, OkHttpClient>? = null
+    @Volatile private var lastError: String? = null
 
-    /** HTTP client for talking to speakers: short timeouts, routed over Wi-Fi even when a VPN is on. */
-    private fun lan(): OkHttpClient {
-        val net = wifiNetwork()
-        lanClient?.let { (n, c) -> if (n == net) return c }
-        val c = http.newBuilder()
-            .connectTimeout(2, TimeUnit.SECONDS).readTimeout(8, TimeUnit.SECONDS)
-            .apply { if (net != null) socketFactory(net.socketFactory) }
-            .build()
-        lanClient = net to c
+    /** Same, but forced onto the Wi-Fi network. VPNs that forbid bypassing (like Tailscale) refuse these, so it's only a fallback. */
+    private fun wifiBound(): OkHttpClient? {
+        val net = wifiNetwork() ?: return null
+        boundClient?.let { (n, c) -> if (n == net) return c }
+        val c = directClient.newBuilder().socketFactory(net.socketFactory).build()
+        boundClient = net to c
         return c
+    }
+
+    /** Runs a request to a speaker: the normal route first (LAN traffic isn't sent through Tailscale), then Wi-Fi-bound. */
+    private fun <T> lanCall(req: Request, block: (okhttp3.Response) -> T): T {
+        val first = runCatching { directClient.newCall(req).execute().use(block) }
+        first.getOrNull()?.let { return it }
+        val e1 = first.exceptionOrNull()
+        val bound = wifiBound()
+        if (bound != null) {
+            val second = runCatching { bound.newCall(req).execute().use(block) }
+            second.getOrNull()?.let { return it }
+        }
+        lastError = e1?.message ?: e1?.javaClass?.simpleName
+        throw e1 ?: java.io.IOException("no response")
     }
 
     /**
@@ -123,7 +138,8 @@ class SonosController(private val context: Context, private val http: OkHttpClie
                     }
                 }
             }
-            _lastScan.value = if (wifiIp == null) "Not on Wi-Fi" else "Searched Wi-Fi $wifiIp · $replies Sonos replies · $open1400 found by network check"
+            _lastScan.value = (if (wifiIp == null) "Not on Wi-Fi" else "Searched Wi-Fi $wifiIp · $replies Sonos replies · $open1400 found by network check") +
+                (if (synchronized(found) { found.isEmpty() }) lastError?.let { " · last error: $it" } ?: "" else "")
             val all = synchronized(found) { found.values.sortedBy { it.name } }
             _rooms.value = all
             if (all.isNotEmpty()) prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
@@ -201,7 +217,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
     suspend fun addByIp(ip: String): String = withContext(Dispatchers.IO) {
         val host = ip.trim().removePrefix("http://").substringBefore('/').substringBefore(':')
         val room = runCatching { describe("http://$host:1400/xml/device_description.xml") }.getOrNull()
-            ?: return@withContext "No Sonos speaker answered at $host"
+            ?: return@withContext "No Sonos speaker answered at $host" + (lastError?.let { " ($it)" } ?: "")
         val found = LinkedHashMap<String, SonosRoom>()
         _rooms.value.forEach { found[it.uuid] = it }
         found[room.uuid] = room
@@ -221,17 +237,20 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         return (1..254).filter { it != b[3] }.map { "${b[0]}.${b[1]}.${b[2]}.$it" }
     }
 
-    private fun port1400Open(ip: String): Boolean = runCatching {
-        val sf = wifiNetwork()?.socketFactory ?: javax.net.SocketFactory.getDefault()
-        sf.createSocket().use { it.connect(InetSocketAddress(ip, 1400), 400) }
-        true
-    }.getOrDefault(false)
+    private fun port1400Open(ip: String): Boolean {
+        fun tryWith(sf: javax.net.SocketFactory) = runCatching { sf.createSocket().use { it.connect(InetSocketAddress(ip, 1400), 400) }; true }.getOrDefault(false)
+        return tryWith(javax.net.SocketFactory.getDefault()) || (wifiNetwork()?.socketFactory?.let(::tryWith) ?: false)
+    }
 
     private fun describe(location: String): SonosRoom? {
-        val xml = lan().newCall(Request.Builder().url(location).build()).execute().use { it.body?.string() } ?: return null
+        val xml = lanCall(Request.Builder().url(location).build()) { it.body?.string() } ?: return null
         fun tag(name: String) = Regex("<$name>([^<]*)</$name>").find(xml)?.groupValues?.get(1)
-        val uuid = tag("UDN")?.removePrefix("uuid:") ?: return null
-        val name = tag("roomName") ?: return null
+        val uuid = tag("UDN")?.removePrefix("uuid:")
+        val name = tag("roomName")
+        if (uuid == null || name == null) {
+            lastError = "unexpected reply from ${URL(location).host}"
+            return null
+        }
         val model = tag("modelName") ?: "Sonos"
         // Skip invisible satellites / subs that can't be coordinators.
         if (xml.contains("<invisible>1</invisible>")) return null
@@ -254,7 +273,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
                 .header("SOAPACTION", "\"urn:schemas-upnp-org:service:$service:1#$action\"")
                 .post(body.toRequestBody("text/xml; charset=\"utf-8\"".toMediaType()))
                 .build()
-            lan().newCall(req).execute().use { res ->
+            lanCall(req) { res ->
                 val text = res.body?.string().orEmpty()
                 if (!res.isSuccessful) error("Sonos $action failed (${res.code})")
                 text
