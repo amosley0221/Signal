@@ -23,6 +23,8 @@ enum class SortTab(val options: List<SortKey>, val default: SortPref) {
     ARTISTS(listOf(SortKey.TITLE, SortKey.SONGS, SortKey.ADDED), SortPref(SortKey.TITLE, false)),
     MOVIES(listOf(SortKey.TITLE, SortKey.ADDED, SortKey.YEAR, SortKey.RATING, SortKey.DURATION), SortPref(SortKey.ADDED, true)),
     SHOWS(listOf(SortKey.TITLE, SortKey.ADDED, SortKey.YEAR, SortKey.RATING), SortPref(SortKey.TITLE, false)),
+    /** Albums on an artist's page: newest release first, like Apple Music. */
+    ARTIST_ALBUMS(listOf(SortKey.YEAR, SortKey.TITLE, SortKey.ADDED), SortPref(SortKey.YEAR, true)),
 }
 
 object Sorting {

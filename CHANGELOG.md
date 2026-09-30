@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.14] - 2026-09-30
+
+### App
+- An artist's albums are now listed by release year, newest first. A sort bar above them lets you switch to A–Z or Date added; tap the selected option again to reverse the order.
+
+### Signal Agent (PC)
+- Up to three library folders now scan at the same time, so a big Music folder no longer holds up Movies, TV Shows and Music Videos.
+- Updating or restarting the agent during a scan keeps the progress already saved; only files it hasn't read yet are scanned.
+
 ## [1.0.13] - 2026-09-30
 
 ### Faster, more reliable Sonos discovery

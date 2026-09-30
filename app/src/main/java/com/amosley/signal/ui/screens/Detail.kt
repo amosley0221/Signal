@@ -306,7 +306,9 @@ fun PlaylistScreen(c: Ctx, id: String) {
 @Composable
 fun ArtistScreen(c: Ctx, name: String) {
     val tracks = c.lib.tracks.filter { it.artist == name }.sortedWith(compareBy<Track>({ it.album ?: "~" }).then(com.amosley.signal.core.trackOrder))
-    val albums = c.lib.albums.filter { a -> a.artist == name }
+    val albums = com.amosley.signal.core.Sorting.albums(
+        c.lib.albums.filter { a -> a.artist == name }, sortPref(c, com.amosley.signal.core.SortTab.ARTIST_ALBUMS),
+    )
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             DetailHeader(
@@ -318,6 +320,7 @@ fun ArtistScreen(c: Ctx, name: String) {
         }
         if (albums.isNotEmpty()) {
             item { SectionLabel("Albums", Modifier.padding(horizontal = 20.dp)) }
+            if (albums.size > 1) item { SortBar(c, com.amosley.signal.core.SortTab.ARTIST_ALBUMS) }
             albumGrid(c, albums, "artist-albums")
         }
         item { SectionLabel("Songs", Modifier.padding(horizontal = 20.dp)) }

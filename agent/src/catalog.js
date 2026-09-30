@@ -19,6 +19,8 @@ const SKIP_DIRS = new Set(['$recycle.bin', 'system volume information', '@eadir'
 const stripTrackNo = (s) => s.replace(/^\d{1,3}(?:[\s.\-_]+|\s*-\s*)/, '').trim() || s;
 
 const PUBLISH_EVERY = 400;
+// How many library folders scan at the same time.
+const SCAN_PARALLEL = 3;
 const META_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms, message) {
   let t;
@@ -128,9 +130,10 @@ export class Catalog {
         this.log(`[plex] refresh failed: ${e.message}`);
       }
     }
-    for (const lib of this.libraries) {
-      if (this.stopRequested) break;
-      if (libIds && !libIds.includes(lib.id)) continue;
+    // Libraries scan side by side (a few at a time), so a big Music folder doesn't hold up Movies and TV.
+    const libs = this.libraries.filter((l) => !libIds || libIds.includes(l.id));
+    await mapLimit(libs, SCAN_PARALLEL, async (lib) => {
+      if (this.stopRequested) return;
       // With a saved index this only looks for new/changed files; unchanged files are not read again.
       const known = Object.keys(this.cache.libs[lib.id]?.files || {}).length > 0;
       const label = known ? `Check ${lib.name} for changes` : `Scan ${lib.name}`;
@@ -146,18 +149,33 @@ export class Catalog {
         job.fail(e);
         this.log(`[scan] ${lib.name} failed: ${e.message}`);
       }
-    }
+    });
     this.lastScanAt = Date.now();
     this.cache.lastScanAt = this.lastScanAt;
     this.build();
     await this.saveCache();
   }
 
+  /** Writes the cache. Calls made while a write is running are merged into one follow-up write. */
   async saveCache() {
+    if (this.saving) {
+      this.saveAgain = true;
+      return this.saving;
+    }
+    this.saving = (async () => {
+      do {
+        this.saveAgain = false;
+        try {
+          await writeJsonAtomic(this.cacheFile, this.cache);
+        } catch (e) {
+          this.log(`[scan] could not save cache: ${e.message}`);
+        }
+      } while (this.saveAgain);
+    })();
     try {
-      await writeJsonAtomic(this.cacheFile, this.cache);
-    } catch (e) {
-      this.log(`[scan] could not save cache: ${e.message}`);
+      await this.saving;
+    } finally {
+      this.saving = null;
     }
   }
 
