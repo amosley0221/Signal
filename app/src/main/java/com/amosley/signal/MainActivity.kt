@@ -47,8 +47,7 @@ class MainActivity : ComponentActivity() {
         val r = hub.remoteOutput
         if ((up || down) && r != null && r.supportsVolume) {
             if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                hub.adjustRemoteVolume(if (up) com.amosley.signal.playback.VOLUME_STEP else -com.amosley.signal.playback.VOLUME_STEP)
-                app.toast("${r.name} volume · ${hub.remoteVolume.value}")
+                hub.adjustRemoteVolume(if (up) com.amosley.signal.playback.VOLUME_STEP else -com.amosley.signal.playback.VOLUME_STEP, announceVolume = true)
             }
             return true
         }

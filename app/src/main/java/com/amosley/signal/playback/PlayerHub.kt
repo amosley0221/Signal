@@ -345,13 +345,19 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     }
 
     /** Volume buttons: nudge the speaker (a Sonos group keeps each room's share), then show its real new volume. */
-    fun adjustRemoteVolume(delta: Int) {
+    fun adjustRemoteVolume(delta: Int, announceVolume: Boolean = false) {
         val r = remote ?: return
         if (!r.supportsVolume) return
         showRemoteVolume(_remoteVolume.value + delta)
         scope.launch {
             volumeLock.withLock {
-                runCatching { r.adjustVolume(delta) }.getOrNull()?.let { if (remote === r) showRemoteVolume(it) }
+                runCatching { r.adjustVolume(delta) }.getOrNull()?.let {
+                    if (remote === r) {
+                        showRemoteVolume(it)
+                        // Report the speaker's real new level (not a guess from a possibly stale number).
+                        if (announceVolume) onToast("${_ui.value.output ?: r.name} volume · $it")
+                    }
+                }
             }
         }
     }
