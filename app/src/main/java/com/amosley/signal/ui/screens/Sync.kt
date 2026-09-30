@@ -131,6 +131,7 @@ fun SyncScreen(c: Ctx) {
                     }
                 }
             }
+            AgentUpdateCard(c)
             val pending = c.dl.values.count { it is DlState.Queued || it is DlState.Running } + tagJobs.count { it.state == "QUEUED" }
             val attention = c.dl.values.count { it is DlState.Failed } + conflicts.size + tagJobs.count { it.state == "FAILED" }
             Spacer(Modifier.height(10.dp))
@@ -639,5 +640,38 @@ private fun Check(text: String, done: Boolean) {
         else Spinner(Modifier.size(18.dp))
         Spacer(Modifier.width(12.dp))
         Text(text, style = T.ui(14.5.sp), color = if (done) C.Fg else C.Muted)
+    }
+}
+
+/** "Signal Agent 1.0.6 is available on STUDIO-PC · Update" — installs on the PC and restarts it. */
+@Composable
+private fun AgentUpdateCard(c: Ctx) {
+    val pc = c.settings.pc ?: return
+    val base = c.status.baseUrl ?: return
+    val scope = rememberCoroutineScope()
+    var info by remember { mutableStateOf<com.amosley.signal.data.AgentUpdate?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(base) { info = runCatching { c.repo.agent.updateInfo(base, pc.token) }.getOrNull() }
+    val u = info ?: return
+    if (!u.available) return
+    Spacer(Modifier.height(10.dp))
+    Row(Modifier.fillMaxWidth().border(1.dp, C.Amber).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Signal Agent ${u.latest} is available", style = T.rowSecondary, color = C.AmberText)
+            Text("${pc.name} has ${u.current}. Updating restarts it; it's back in a few seconds.", style = T.ui(12.5.sp), color = C.Muted)
+        }
+        if (busy) Spinner(Modifier.size(16.dp)) else OutlineBtn("Update", color = C.AmberText, border = C.Amber) {
+            busy = true
+            scope.launch {
+                val ok = runCatching { c.repo.agent.startUpdate(base, pc.token) }.isSuccess
+                c.toast(if (ok) "Updating ${pc.name}…" else "Couldn't start the update")
+                if (ok) {
+                    delay(15_000)
+                    c.repo.refreshNow(force = true)
+                    info = runCatching { c.repo.agent.updateInfo(base, pc.token) }.getOrNull()
+                }
+                busy = false
+            }
+        }
     }
 }

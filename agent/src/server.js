@@ -307,6 +307,15 @@ export function createServer(agent) {
     if (st.ok && st.supported) agent.log(`[startup] Start with Windows ${body.enabled ? 'on' : 'off'} (${st.file})`);
     sendJson(req, res, 200, st);
   });
+  // Used by the Windows tray icon (src/tray.ps1). Both also need the X-Signal-Admin header.
+  admin('GET', '/admin/tray-state', (req, res) => {
+    if (req.headers['x-signal-admin'] !== '1') return sendJson(req, res, 403, { error: 'forbidden' });
+    sendJson(req, res, 200, agent.trayState());
+  });
+  admin('POST', '/admin/quit', (req, res) => {
+    res.once('finish', () => setImmediate(() => { agent.quit().catch((e) => agent.log(`[agent] quit failed: ${e.stack || e}`)); }));
+    sendJson(req, res, 200, { ok: true });
+  });
 
   const server = http.createServer(async (req, res) => {
     let url;

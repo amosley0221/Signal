@@ -31,6 +31,7 @@ val SignalJson = Json {
 @Serializable data class PairStatus(val status: String, val token: String? = null)
 @Serializable data class ApiLyrics(val lang: String? = null, val lines: List<LyricLine> = emptyList(), val translation: List<LyricLine>? = null, val synced: Boolean = true)
 @Serializable data class ActivityItem(val id: String, val kind: String, val title: String, val detail: String? = null, val state: String, val progress: Double? = null)
+@Serializable data class AgentUpdate(val current: String? = null, val latest: String? = null, val available: Boolean = false, val notes: String? = null)
 @Serializable data class TagResult(val ok: Boolean = false, val mtime: Long? = null, val error: String? = null, val pcArtist: String? = null)
 @Serializable private data class ApiSuggestion(val name: String, val why: String, val kind: String)
 @Serializable private data class PairStartBody(val deviceName: String)
@@ -74,6 +75,11 @@ class AgentClient(private val http: OkHttpClient) {
     suspend fun catalog(base: String, token: String): Catalog = SignalJson.decodeFromString(call(base, "/api/catalog", token, timeoutSec = 120))
 
     suspend fun lyrics(base: String, token: String, id: String): ApiLyrics = SignalJson.decodeFromString(call(base, "/api/lyrics/$id", token))
+
+    /** Self-update of the PC agent (agents older than 1.0.5 don't have this and return 404). */
+    suspend fun updateInfo(base: String, token: String): AgentUpdate = SignalJson.decodeFromString(call(base, "/api/update", token))
+
+    suspend fun startUpdate(base: String, token: String) { call(base, "/api/update", token, "{}".toRequestBody(jsonType)) }
 
     suspend fun saveLyrics(base: String, token: String, id: String, lrc: String) {
         call(base, "/api/lyrics/$id", token, SignalJson.encodeToString(LyricsBody.serializer(), LyricsBody(lrc)).toRequestBody(jsonType))

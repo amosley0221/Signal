@@ -111,10 +111,18 @@ jobs:
       - name: Build SignalAgent.exe
         run: npm run build:exe
 
+      - name: Checksum (used by the agent's self-updater)
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash dist/SignalAgent.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist/SignalAgent.exe.sha256 -Value "$h  SignalAgent.exe" -NoNewline -Encoding ascii
+
       - uses: actions/upload-artifact@v4
         with:
           name: agent-exe
-          path: agent/dist/SignalAgent.exe
+          path: |
+            agent/dist/SignalAgent.exe
+            agent/dist/SignalAgent.exe.sha256
 
   release:
     needs: [android, agent-windows]
@@ -142,6 +150,7 @@ jobs:
           gh release create "${{ needs.android.outputs.tag }}" \
             "out/${{ needs.android.outputs.apk }}" \
             "out/SignalAgent.exe" \
+            "out/SignalAgent.exe.sha256" \
             --target "${{ github.sha }}" \
             --title "Signal Player ${{ needs.android.outputs.version }}" \
             --notes-file notes.md \

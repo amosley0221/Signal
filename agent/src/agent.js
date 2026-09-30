@@ -9,6 +9,7 @@ import { createServer } from './server.js';
 import { AGENT_DIR, isPackaged, isTailscaleAddress, configOverride } from './config.js';
 import { StartupEntry, launchCommand } from './desktop.js';
 import { lanAddresses, readJsonSync } from './util.js';
+import { logFileFor } from './logfile.js';
 
 /* global __SIGNAL_AGENT_VERSION__ -- replaced at build time in the single-executable bundle */
 export const VERSION = (typeof __SIGNAL_AGENT_VERSION__ === 'string' ? __SIGNAL_AGENT_VERSION__ : null)
@@ -18,7 +19,8 @@ const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
 export class Agent {
   /**
    * @param {any} config normalised config (see config.js)
-   * @param {{mdns?:boolean, watch?:boolean, periodic?:boolean, logFile?:boolean, quiet?:boolean, initialScan?:boolean, startup?:StartupEntry}} [opts]
+   * @param {{mdns?:boolean, watch?:boolean, periodic?:boolean, logFile?:boolean, quiet?:boolean, initialScan?:boolean, startup?:StartupEntry, onQuit?:()=>any}} [opts]
+   *   `onQuit` is called by POST /admin/quit (the tray's Quit). Default: stop the agent and exit the process.
    */
   constructor(config, opts = {}) {
     this.config = config;
@@ -27,6 +29,7 @@ export class Agent {
     this.reconfiguring = Promise.resolve();
     fs.mkdirSync(config.dataDir, { recursive: true });
     this.logPath = path.join(config.dataDir, 'agent.log');
+    this.logFile = this.opts.logFile ? logFileFor(this.logPath) : null;
     this.log = this.log.bind(this);
     this.state = new State(config.dataDir, this.log);
     this.activity = new Activity();
@@ -54,11 +57,7 @@ export class Agent {
   log(msg) {
     const line = `${new Date().toISOString()} ${msg}`;
     if (!this.opts.quiet) console.log(line);
-    if (this.opts.logFile) {
-      try {
-        fs.appendFileSync(this.logPath, `${line}\n`);
-      } catch { /* ignore */ }
-    }
+    this.logFile?.write(line); // rotates at ~5 MB, keeping agent.log.1
   }
 
   info() {
@@ -79,6 +78,33 @@ export class Agent {
       scanning: !!this.catalog.scanning,
       activity: this.activity.list(),
     };
+  }
+
+  /** Small status snapshot polled by the Windows tray icon every few seconds. */
+  trayState() {
+    const pending = this.state.pendingPairs();
+    const st = this.startup.status();
+    return {
+      name: this.config.name,
+      startup: !!st.enabled,
+      startupSupported: !!st.supported,
+      pending: pending.length,
+      requests: pending.map(({ id, deviceName }) => ({ id, deviceName })),
+      devices: this.state.listDevices().length,
+      needsSetup: !this.config.libraries.length,
+    };
+  }
+
+  /** Stop everything and leave (tray → Quit). */
+  async quit() {
+    if (this.quitting) return this.quitting;
+    this.log('[agent] quit requested');
+    this.quitting = (async () => {
+      if (this.opts.onQuit) return this.opts.onQuit();
+      await this.stop();
+      process.exit(0);
+    })();
+    return this.quitting;
   }
 
   /** LAN and Tailscale (100.64.0.0/10) IPv4 addresses, for typing into the phone. */
