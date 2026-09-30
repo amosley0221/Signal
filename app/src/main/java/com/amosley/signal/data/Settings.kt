@@ -47,6 +47,8 @@ data class Settings(
     val phoneFoldersChosen: Boolean = false,
     /** Look lyrics up on LRCLIB when a song has no .lrc file. */
     val onlineLyrics: Boolean = true,
+    /** Chosen sort for each library tab. */
+    val sorts: Map<com.amosley.signal.core.SortTab, com.amosley.signal.core.SortPref> = emptyMap(),
 )
 
 enum class PhoneFolderType(val label: String) {

@@ -103,3 +103,25 @@ class PastedLyricsTest {
         assertTrue(s.last().t < 120.0)
     }
 }
+
+class SortingTest {
+    private fun t(id: String, title: String, artist: String?, added: Long, year: Int? = null) =
+        Track(id, Origin.PC, title, artist = artist, addedAt = added, year = year)
+
+    @Test fun songsByTitleIgnoresLeadingThe() {
+        val r = Sorting.songs(listOf(t("1", "The Zebra", null, 0), t("2", "Apple", null, 0), t("3", "banana", null, 0)), SortPref(SortKey.TITLE, false))
+        assertEquals(listOf("2", "3", "1"), r.map { it.id })
+    }
+
+    @Test fun dateAddedNewestFirstAndMissingYearsLast() {
+        val list = listOf(t("a", "A", null, 10, 2020), t("b", "B", null, 30), t("c", "C", null, 20, 2024))
+        assertEquals(listOf("b", "c", "a"), Sorting.songs(list, SortPref(SortKey.ADDED, true)).map { it.id })
+        assertEquals(listOf("c", "a", "b"), Sorting.songs(list, SortPref(SortKey.YEAR, true)).map { it.id })
+        assertEquals(listOf("a", "c", "b"), Sorting.songs(list, SortPref(SortKey.YEAR, false)).map { it.id })
+    }
+
+    @Test fun artistsBySongCount() {
+        val r = Sorting.artists(listOf("X" to 2, "Y" to 5, "Z" to 1), emptyMap(), SortPref(SortKey.SONGS, true))
+        assertEquals(listOf("Y", "X", "Z"), r.map { it.first })
+    }
+}

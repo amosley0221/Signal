@@ -50,6 +50,9 @@ import com.amosley.signal.core.Movie
 import com.amosley.signal.core.MusicVideo
 import com.amosley.signal.core.Origin
 import com.amosley.signal.core.Show
+import com.amosley.signal.core.SortPref
+import com.amosley.signal.core.SortTab
+import com.amosley.signal.core.Sorting
 import com.amosley.signal.core.Track
 import com.amosley.signal.data.DlState
 import com.amosley.signal.ui.Ctx
@@ -168,6 +171,39 @@ private fun SubTabs(c: Ctx) {
     }
 }
 
+fun sortPref(c: Ctx, tab: SortTab): SortPref = c.settings.sorts[tab] ?: tab.default
+
+/** "SORT  A–Z ↑  Artist  Date added …" — tap an option to sort by it, tap it again to flip the order. */
+@Composable
+fun SortBar(c: Ctx, tab: SortTab, modifier: Modifier = Modifier) {
+    val cur = sortPref(c, tab)
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Mono("Sort", color = C.Faint, style = T.metaMono)
+        tab.options.forEach { k ->
+            val on = cur.key == k
+            Box(
+                Modifier
+                    .background(if (on) C.Amber else Color.Transparent)
+                    .border(1.dp, if (on) C.Amber else C.HairStrong)
+                    .clickable {
+                        val next = if (on) cur.copy(descending = !cur.descending) else SortPref(k, k.defaultDescending)
+                        c.repo.updateSettings { it.copy(sorts = it.sorts + (tab to next)) }
+                    }
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    k.label + if (on) (if (cur.descending) " ↓" else " ↑") else "",
+                    style = T.ui(12.sp, 600), color = if (on) C.OnAmber else C.Fg, maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
 fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
     items(list, key = { "$key-${it.id}" }) { t ->
         SongRow(
@@ -243,7 +279,7 @@ private fun EmptyLibrary(c: Ctx) {
 }
 
 private fun LazyListScope.songs(c: Ctx) {
-    val all = c.lib.tracks.sortedBy { it.title.lowercase() }
+    val all = Sorting.songs(c.lib.tracks, sortPref(c, SortTab.SONGS))
     val missing = untagged(c)
     item {
         Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -268,7 +304,7 @@ private fun LazyListScope.songs(c: Ctx) {
             }
         }
     }
-    item { Spacer(Modifier.height(8.dp)) }
+    item { SortBar(c, SortTab.SONGS, Modifier.padding(top = 8.dp)) }
     songRows(c, all, "songs")
 }
 
@@ -295,12 +331,14 @@ private fun LazyListScope.albums(c: Ctx) {
             OutlineBtn("Shuffle all albums", icon = Icons.Filled.Shuffle) { c.hub.shuffleAll(c.lib.albums.flatMap { it.tracks }) }
         }
     }
-    albumGrid(c, c.lib.albums, "albums")
+    item { SortBar(c, SortTab.ALBUMS) }
+    albumGrid(c, Sorting.albums(c.lib.albums, sortPref(c, SortTab.ALBUMS)), "albums")
 }
 
 private fun LazyListScope.artists(c: Ctx) {
-    item { Spacer(Modifier.height(10.dp)) }
-    items(c.lib.artists, key = { "artist-${it.first}" }) { (name, n) ->
+    item { SortBar(c, SortTab.ARTISTS, Modifier.padding(top = 10.dp)) }
+    val newest = HashMap<String, Long>().apply { c.lib.tracks.forEach { t -> t.artist?.let { a -> if (t.addedAt > (this[a] ?: 0)) this[a] = t.addedAt } } }
+    items(Sorting.artists(c.lib.artists, newest, sortPref(c, SortTab.ARTISTS)), key = { "artist-${it.first}" }) { (name, n) ->
         Row(Modifier.fillMaxWidth().clickable { c.st.openArtist(name) }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Art(name, c.artistArt(name), Modifier.size(56.dp), shape = CircleShape)
             Spacer(Modifier.width(14.dp))
@@ -407,8 +445,8 @@ private fun LazyListScope.posterGrid(c: Ctx, count: Int, key: (Int) -> String, c
 }
 
 private fun LazyListScope.movies(c: Ctx) {
-    val list: List<Movie> = c.lib.movies.sortedByDescending { it.addedAt }
-    item { Spacer(Modifier.height(14.dp)) }
+    val list: List<Movie> = Sorting.movies(c.lib.movies, sortPref(c, SortTab.MOVIES))
+    item { SortBar(c, SortTab.MOVIES, Modifier.padding(top = 10.dp)) }
     if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val mv = list[i]
@@ -427,8 +465,8 @@ private fun LazyListScope.movies(c: Ctx) {
 }
 
 private fun LazyListScope.shows(c: Ctx) {
-    val list: List<Show> = c.lib.shows.sortedBy { it.title.lowercase() }
-    item { Spacer(Modifier.height(14.dp)) }
+    val list: List<Show> = Sorting.shows(c.lib.shows, sortPref(c, SortTab.SHOWS))
+    item { SortBar(c, SortTab.SHOWS, Modifier.padding(top = 10.dp)) }
     if (list.isEmpty()) item { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
     posterGrid(c, list.size, { list[it].id }) { i, m ->
         val sh = list[i]

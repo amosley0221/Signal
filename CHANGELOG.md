@@ -3,6 +3,18 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.4] - 2026-09-30
+
+### Sorting
+- **Songs, Albums, Artists, Movies and TV Shows** each have a **Sort** row at the top of the list. Tap an option to sort by it, and tap it again to flip the order (↑ / ↓).
+  - **Songs:** A–Z, Artist, Album, Date added, Year, Length
+  - **Albums:** A–Z, Artist, Date added, Year
+  - **Artists:** A–Z, Most songs, Date added (newest song)
+  - **Movies:** A–Z, Date added, Year, Rating, Length
+  - **TV Shows:** A–Z, Date added, Year, Rating
+- A–Z ignores a leading "The" or "A", so "The Weeknd" sorts under W. Songs and albums with no year or artist always go to the end.
+- Each tab remembers its sort.
+
 ## [1.0.3] - 2026-09-30
 
 ### Edit every song detail
