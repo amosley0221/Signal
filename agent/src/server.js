@@ -89,7 +89,8 @@ export async function sendFile(req, res, abs, { contentType, headers = {} } = {}
     res.writeHead(200, { ...base, 'Content-Length': size });
   }
   if (req.method === 'HEAD' || size === 0) return res.end();
-  const stream = fs.createReadStream(abs, { start, end });
+  // Big reads (1 MB) keep a movie flowing on a busy hard drive; the default 64 KB means many more seeks.
+  const stream = fs.createReadStream(abs, { start, end, highWaterMark: 1024 * 1024 });
   stream.on('error', () => res.destroy());
   res.on('close', () => stream.destroy());
   stream.pipe(res);

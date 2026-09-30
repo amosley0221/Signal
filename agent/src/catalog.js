@@ -26,7 +26,7 @@ const PUBLISH_MIN_MS = 30_000;
 // Files read at once across all scanning libraries; fewer while the phone is streaming a song,
 // so playback isn't starved by the scan on the same disk.
 const IO_SLOTS = 8;
-const IO_SLOTS_STREAMING = 2;
+const IO_SLOTS_STREAMING = 1;
 const META_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms, message) {
   let t;

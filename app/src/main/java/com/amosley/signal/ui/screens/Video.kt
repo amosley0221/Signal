@@ -92,6 +92,8 @@ import com.amosley.signal.core.Episode
 import com.amosley.signal.core.Fmt
 import com.amosley.signal.core.Movie
 import com.amosley.signal.core.Origin
+import com.amosley.signal.ui.components.OutlineBtn
+import com.amosley.signal.ui.components.Spinner
 import com.amosley.signal.core.Show
 import com.amosley.signal.core.Subtitle
 import com.amosley.signal.core.resolutionLabel
@@ -400,7 +402,10 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
     var dur by remember { mutableLongStateOf(src.durationMs) }
     var playing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
+    var buffering by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
     val casting = app.videoCast
+    val fromPc = src.uri.scheme?.startsWith("http") == true
 
     DisposableEffect(screen) {
         app.hub.pause()
@@ -418,8 +423,30 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
         player.prepare()
         player.play()
         val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
+                // Background downloads wait while a video streams from the PC, so it gets the disk and Wi-Fi.
+                app.videoStreaming = fromPc && (isPlaying || player.playbackState == Player.STATE_BUFFERING)
+            }
+            override fun onPlayerError(e: androidx.media3.common.PlaybackException) {
+                buffering = false
+                error = when (e.errorCode) {
+                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
+                    -> "This phone can't play this video's format. Try Cast to play it on a TV."
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                    androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                    -> "Couldn't load this from ${c.pcName}. Check that it's on and reachable, then try again."
+                    else -> "Can't play this · ${e.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ')}"
+                }
+                app.videoStreaming = false
+            }
             override fun onPlaybackStateChanged(state: Int) {
+                buffering = state == Player.STATE_BUFFERING
+                if (state == Player.STATE_READY) error = null
+                app.videoStreaming = fromPc && (state == Player.STATE_BUFFERING || player.isPlaying)
                 if (state == Player.STATE_ENDED) {
                     app.repo.reportProgress(src.id, dur, dur)
                     src.next?.let { c.st.stack[c.st.stack.lastIndex] = it }
@@ -431,6 +458,7 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
         app.currentVideoItem = castUrl?.let { RemoteItem(it, src.title, null, null, null, "video/mp4", src.durationMs, isVideo = true) }
         app.videoPosition = { player.currentPosition }
         onDispose {
+            app.videoStreaming = false
             app.repo.reportProgress(src.id, player.currentPosition, player.duration.coerceAtLeast(dur))
             player.removeListener(listener)
             player.release()
@@ -556,8 +584,25 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
                     Text(it, style = T.mono(13.sp, 600), color = C.Fg)
                 }
             }
+            // Loading / error state, shown even when the controls are hidden.
+            if (casting == null && (error != null || (buffering && !ui))) {
+                Column(
+                    Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (error != null) {
+                        Text(error!!, style = T.ui(14.sp, 600), color = C.Fg, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Spacer(Modifier.height(10.dp))
+                        OutlineBtn("Try again") { error = null; buffering = true; player.prepare(); player.play() }
+                    } else {
+                        Spinner(Modifier.size(28.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Mono(if (fromPc) "Loading from ${c.pcName}…" else "Loading…", color = C.Fg)
+                    }
+                }
+            }
             if (ui && !c.st.pip) VideoOverlay(
-                c, src, shownPos, dur, shownPlaying, full, subs, SPEEDS[speedIdx], chapter,
+                c, src, shownPos, dur, shownPlaying, full, subs, SPEEDS[speedIdx], chapter, loading = buffering && casting == null && error == null,
                 onBack = { if (full) full = false else c.st.back() },
                 onCast = { c.st.sheet = Sheet.Cast(video = true) },
                 onSubs = { subs = !subs },
@@ -614,7 +659,7 @@ private fun OverlayIcon(icon: ImageVector, desc: String, size: Int = 40, onClick
 
 @Composable
 private fun VideoOverlay(
-    c: Ctx, src: VideoSource, pos: Long, dur: Long, playing: Boolean, full: Boolean, subs: Boolean, speed: Float, chapter: Chapter?,
+    c: Ctx, src: VideoSource, pos: Long, dur: Long, playing: Boolean, full: Boolean, subs: Boolean, speed: Float, chapter: Chapter?, loading: Boolean,
     onBack: () -> Unit, onCast: () -> Unit, onSubs: () -> Unit, onSpeed: () -> Unit, onToggle: () -> Unit, onSeekBy: (Long) -> Unit,
     onSeek: (Long) -> Unit, onPip: () -> Unit, onFull: () -> Unit, onNext: (() -> Unit)?,
 ) {
@@ -632,7 +677,8 @@ private fun VideoOverlay(
         Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             OverlayIcon(Icons.Filled.Replay10, "Back 10 seconds", 48) { onSeekBy(-10_000) }
             Box(Modifier.size(72.dp).background(Color.White, CircleShape).clickable(onClick = onToggle), contentAlignment = Alignment.Center) {
-                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/pause", tint = Color.Black, modifier = Modifier.size(40.dp))
+                if (loading) Spinner(Modifier.size(34.dp), color = Color.Black)
+                else Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/pause", tint = Color.Black, modifier = Modifier.size(40.dp))
             }
             OverlayIcon(Icons.Filled.Forward10, "Forward 10 seconds", 48) { onSeekBy(10_000) }
         }

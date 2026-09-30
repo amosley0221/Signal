@@ -33,6 +33,8 @@ class SignalApp : Application(), ImageLoaderFactory {
     lateinit var cast: CastManager
         private set
     lateinit var sonos: SonosController
+    /** A movie/episode is streaming from the PC right now (background downloads wait). Read from any thread. */
+    @Volatile var videoStreaming = false
         private set
     private val _toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val toasts: SharedFlow<String> = _toasts
@@ -57,7 +59,7 @@ class SignalApp : Application(), ImageLoaderFactory {
         super.onCreate()
         repo = Repository(this, scope)
         hub = PlayerHub(this, repo, scope)
-        repo.downloads.holdWhile = { hub.streamingFromPc }
+        repo.downloads.holdWhile = { hub.streamingFromPc || videoStreaming }
         hub.onToast = ::toast
         sonos = SonosController(this, repo.http, scope)
         cast = CastManager(this) { output ->

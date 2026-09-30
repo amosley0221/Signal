@@ -3,6 +3,14 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.28] - 2026-10-01
+
+### Movies and TV from the PC start faster
+- **App:** background downloads now wait while a movie or episode streams from the PC, not just while music plays. Before, up to three song downloads competed with the video for the PC's disk and Wi-Fi.
+- **App:** the video player shows a spinner and "Loading from PC…" while it loads, instead of a play button that looks like nothing is happening.
+- **App:** if a video can't play, the player now says why, instead of staying on a black screen. The two main cases are a format the phone can't decode (try Cast to a TV) and a PC that can't be reached. A **Try again** button reloads it.
+- **Signal Agent (PC):** files are read in 1 MB pieces instead of 64 KB, which keeps a movie flowing from a busy hard drive. While something is streaming, the library scan now reads only one file at a time.
+
 ## [1.0.27] - 2026-10-01
 
 ### Album covers load once and stay
