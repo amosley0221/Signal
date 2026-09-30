@@ -10,7 +10,7 @@ import { AGENT_DIR, isPackaged, isTailscaleAddress, configOverride } from './con
 import { StartupEntry, launchCommand } from './desktop.js';
 import { lanAddresses, readJsonSync } from './util.js';
 import { logFileFor } from './logfile.js';
-import { Updater, cleanupOldExe } from './updater.js';
+import { Updater, cleanupOldExe, takeLastUpdateError } from './updater.js';
 
 /* global __SIGNAL_AGENT_VERSION__ -- replaced at build time in the single-executable bundle */
 export const VERSION = (typeof __SIGNAL_AGENT_VERSION__ === 'string' ? __SIGNAL_AGENT_VERSION__ : null)
@@ -51,6 +51,9 @@ export class Agent {
       // The new copy is already starting; free the port and leave.
       onRestart: async () => { await this.stop(); process.exit(0); },
     });
+    // The previous run's update helper couldn't install the new version (it restored the old one).
+    const lastUpdateError = takeLastUpdateError(config.dataDir);
+    if (lastUpdateError) { this.updater.error = lastUpdateError; this.log(`[update] ${lastUpdateError}`); }
     this.timer = null;
     this.state.onChange((ev) => {
       if (ev.type === 'pair') {

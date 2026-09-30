@@ -24,6 +24,7 @@ export function adminPage() {
   .card.block { display:block; }
   .card.hot { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .welcome { border-color: var(--accent); }
+  [hidden] { display: none !important; }
   .grow { flex: 1 1 220px; min-width: 0; }
   .code { font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; font-size: 30px; letter-spacing: .18em; color: var(--accent); }
   .addr { font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; font-size: 18px; color: var(--accent); user-select: all; }

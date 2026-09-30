@@ -3,6 +3,24 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.9] - 2026-09-30
+
+### Signal Agent updates install reliably
+- Fixed: "Update failed: could not rename the running program (EPERM)". Windows sometimes won't let a running
+  program replace itself, for example while Windows Defender is scanning it.
+- Updates now work like this: Signal Agent downloads and verifies the new version, then closes, and a small helper
+  swaps the files and starts it again.
+  - If the file is still busy, the helper keeps retrying for up to 30 seconds.
+  - If the swap still fails, it puts the old version back, restarts it, and the setup page tells you the update
+    didn't install.
+- **One more manual download:** versions 1.0.5–1.0.8 have the old updater, so download this version's
+  `SignalAgent.exe` once and replace your current file. After that, updates install by themselves.
+- Tip: keep `SignalAgent.exe` in a permanent folder, for example `C:\Users\<you>\SignalAgent\`, not Downloads.
+  After moving it, turn **Start with Windows** off and on again.
+
+### Fixes
+- The setup page no longer shows the "Welcome! Let's set up Signal Agent" box after your folders are set up.
+
 ## [1.0.8] - 2026-09-30
 
 ### Signal Agent re-scans much less

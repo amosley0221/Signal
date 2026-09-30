@@ -138,6 +138,89 @@ export async function swapAndRestart({ newFile, execPath, args = [], fsOps = rea
   }
 }
 
+/**
+ * PowerShell helper that installs an update from outside the running program. Windows may refuse to rename
+ * or overwrite a running .exe (EPERM — e.g. while Defender scans it), so the agent starts this helper and
+ * exits; the helper waits for it to close, backs up the old exe, copies the new one in (retrying while the
+ * file is locked), restores the backup if that fails, and starts Signal Agent again either way.
+ * Result lines go to update.log next to the downloaded file; a failure also writes last-update-error.txt.
+ */
+export const HELPER_PS1 = String.raw`param([int]$AgentPid, [string]$Src, [string]$Dst, [string]$ArgLine)
+$ErrorActionPreference = 'Stop'
+$dir = Split-Path -Parent $Src
+$log = Join-Path $dir 'update.log'
+$errFile = Join-Path $dir 'last-update-error.txt'
+function Log([string]$m) { try { Add-Content -LiteralPath $log -Value ((Get-Date -Format o) + ' ' + $m) } catch { } }
+Log ('waiting for Signal Agent (pid ' + $AgentPid + ') to close')
+try { Wait-Process -Id $AgentPid -Timeout 90 -ErrorAction SilentlyContinue } catch { }
+Start-Sleep -Milliseconds 800
+$bak = $Dst + '.bak'
+$ok = $false
+$last = ''
+for ($i = 0; $i -lt 30 -and -not $ok; $i++) {
+  try {
+    Copy-Item -LiteralPath $Dst -Destination $bak -Force
+    Copy-Item -LiteralPath $Src -Destination $Dst -Force
+    $ok = $true
+  } catch {
+    $last = $_.Exception.Message
+    Log ('file busy, retrying: ' + $last)
+    Start-Sleep -Seconds 1
+  }
+}
+if ($ok) {
+  Log 'new version installed'
+  try { Remove-Item -LiteralPath $Src -Force } catch { }
+  try { Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue } catch { }
+} else {
+  Log ('could not install the update: ' + $last + ' - restoring the previous version')
+  try { if (Test-Path -LiteralPath $bak) { Copy-Item -LiteralPath $bak -Destination $Dst -Force } } catch { Log ('restore failed: ' + $_.Exception.Message) }
+  try { Set-Content -LiteralPath $errFile -Value ('The update could not be installed: ' + $last) } catch { }
+}
+Start-Process -FilePath $Dst -ArgumentList $ArgLine -WorkingDirectory (Split-Path -Parent $Dst)
+Log 'Signal Agent started'
+`;
+
+/** Quote one Windows command-line argument. */
+export function winQuote(a) {
+  const s = String(a);
+  return /[\s"]/.test(s) ? '"' + s.replace(/"/g, '\\"') + '"' : s;
+}
+
+/** powershell.exe arguments to run the update helper. */
+export function helperArgs({ scriptPath, pid, src, dst, args = [] }) {
+  return [
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', scriptPath,
+    '-AgentPid', String(pid), '-Src', src, '-Dst', dst,
+    '-ArgLine', ['--updated', '--no-browser', ...args].map(winQuote).join(' '),
+  ];
+}
+
+/** Write the helper next to the download and start it detached (it outlives this process). */
+export async function startUpdateHelper({ newFile, execPath, pid = process.pid, args = [], spawnFn = spawn }) {
+  const dir = path.dirname(newFile);
+  const scriptPath = path.join(dir, 'apply-update.ps1');
+  // BOM so Windows PowerShell 5.1 reads it as UTF-8 (paths may contain accents).
+  await fsp.writeFile(scriptPath, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(HELPER_PS1.replace(/\r?\n/g, '\r\n'), 'utf8')]));
+  const child = spawnFn('powershell.exe', helperArgs({ scriptPath, pid, src: newFile, dst: execPath, args }), {
+    detached: true, windowsHide: true, stdio: 'ignore', cwd: dir,
+  });
+  child.unref?.();
+  return child;
+}
+
+/** An update that the helper could not install (read once at startup, then deleted). */
+export function takeLastUpdateError(dataDir) {
+  const f = path.join(dataDir, 'update', 'last-update-error.txt');
+  try {
+    const msg = fs.readFileSync(f, 'utf8').trim();
+    fs.rmSync(f, { force: true });
+    return msg || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Delete SignalAgent.old.exe left by an update (it may stay locked for a moment while the old copy exits). */
 export async function cleanupOldExe(execPath, { fsOps = realFs, tries = 10, delayMs = 1500 } = {}) {
   const old = oldExePath(execPath);
@@ -293,8 +376,11 @@ export class Updater {
       await fsp.rm(part, { force: true }).catch(() => {});
       throw e;
     }
-    log(`[update] verified ${rel.version} (${got.size} bytes${expectedSha ? ', SHA-256 ok' : ', no checksum published'}); restarting`);
-    await swapAndRestart({ newFile: part, execPath: this.opts.execPath, args: this.opts.args, fsOps: this.opts.fsOps, spawnFn: this.opts.spawnFn });
+    log(`[update] verified ${rel.version} (${got.size} bytes, SHA-256 ok); closing so the new version can be installed`);
+    const ready = path.join(dir, `SignalAgent-${rel.version}.exe`);
+    await fsp.rm(ready, { force: true });
+    await fsp.rename(part, ready);
+    await (this.opts.startHelper || startUpdateHelper)({ newFile: ready, execPath: this.opts.execPath, args: this.opts.args, spawnFn: this.opts.spawnFn });
     this.restarting = true;
     await this.opts.onRestart?.();
   }
