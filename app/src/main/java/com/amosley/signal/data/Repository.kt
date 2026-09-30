@@ -66,7 +66,12 @@ data class LibraryView(
     val artists: List<Pair<String, Int>> = emptyList(),
     /** Track id → main artist (features folded in), see ArtistNames. */
     val artistOf: Map<String, String> = emptyMap(),
+    /** Plex's Continue Watching row (item ids), or null without Plex. */
+    val plexContinue: Set<String>? = null,
 ) {
+    /** A movie by id, including the extra versions folded under another poster. */
+    fun movie(id: String): Movie? = movies.firstOrNull { it.id == id } ?: movies.firstNotNullOfOrNull { m -> m.versions.firstOrNull { it.id == id } }
+
     fun artistTracks(name: String): List<Track> = tracks.filter { (artistOf[it.id] ?: it.artist) == name || it.artist == name }
 }
 
@@ -193,6 +198,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             // Not in the PC library: use details found online (if any).
             .map { m -> if (m.id.startsWith("locv:")) movieInfo[m.id]?.let { OnlineVideoInfo.apply(m, it) } ?: m else m }
             .map { Watching.applyLocal(it, progress[it.id]) }
+            .let { com.amosley.signal.core.MovieVersions.merge(it) }
         val shows = PhoneMatch.shows(cat.shows.filter { libOk(it.libraryId) }, phone.shows)
             .map { sh -> if (sh.id.startsWith("locs:")) showInfo[com.amosley.signal.core.VideoNames.norm(sh.title)]?.let { OnlineVideoInfo.apply(sh, it) } ?: sh else sh }
             .map { sh ->
@@ -203,7 +209,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         }
         val artistOf = com.amosley.signal.core.ArtistNames.primary(tracks)
         val artists = artistOf.values.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
-        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists, artistOf)
+        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists, artistOf, cat.continueWatching?.toSet())
     }
 
     fun updateSettings(f: (Settings) -> Settings) {

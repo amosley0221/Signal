@@ -205,6 +205,10 @@ export class Agent {
     if (this.opts.periodic) {
       this.timer = setInterval(() => this.catalog.scan('periodic').catch(() => {}), RESCAN_INTERVAL_MS);
       this.timer.unref?.();
+      // Plex's Continue Watching changes as you watch anywhere: check it every few minutes (cheap, one request).
+      this.catalog.refreshPlexContinue().catch(() => {});
+      this.deckTimer = setInterval(() => this.catalog.refreshPlexContinue().catch(() => {}), 5 * 60 * 1000);
+      this.deckTimer.unref?.();
     }
     return this.port;
   }
@@ -235,6 +239,7 @@ export class Agent {
 
   async stop() {
     clearInterval(this.timer);
+    clearInterval(this.deckTimer);
     this.updater.stop();
     await this.reconfiguring;
     this.catalog.stopWatching();

@@ -133,22 +133,37 @@ class WatchingTest {
 
     @Test fun upNextIsEpisodeAfterLastWatched() {
         val sh = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20), ep("3", 1, 3), ep("4", 2, 1))
-        assertEquals("3", Watching.upNext(listOf(sh)).single().episode!!.id)
+        assertEquals("3", Watching.upNext(listOf(sh), now = 100).single().episode!!.id)
     }
 
     @Test fun inProgressGoesToContinueWatchingNotUpNext() {
         val sh = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, offset = 600_000, viewed = 30))
-        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(sh)))
-        assertEquals("2", Watching.continueWatching(emptyList(), listOf(sh)).single().episode!!.id)
+        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(sh), now = 100))
+        assertEquals("2", Watching.continueWatching(emptyList(), listOf(sh), now = 100).single().episode!!.id)
     }
 
     @Test fun newEpisodeAfterCatchingUpAppearsInUpNext() {
         val caughtUp = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20))
-        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(caughtUp)))
+        assertEquals(emptyList<WatchItem>(), Watching.upNext(listOf(caughtUp), now = 100))
         val withNew = show("a", ep("1", 1, 1, watched = true, viewed = 10), ep("2", 1, 2, watched = true, viewed = 20), ep("3", 1, 3, added = 99))
-        val item = Watching.upNext(listOf(withNew)).single()
+        val item = Watching.upNext(listOf(withNew), now = 100).single()
         assertEquals("3", item.episode!!.id)
         assertEquals(99L, item.sortKey) // newly added episode bumps the show to the front
+    }
+
+    @Test fun oldProgressDropsOffAfter16Weeks() {
+        val week = 7L * 24 * 3600_000
+        val sh = show("a", ep("1", 1, 1, offset = 600_000, viewed = 1))
+        assertEquals(1, Watching.continueWatching(emptyList(), listOf(sh), now = 10 * week).size)
+        assertEquals(0, Watching.continueWatching(emptyList(), listOf(sh), now = 17 * week).size)
+        assertEquals(1, Watching.continueWatching(emptyList(), listOf(sh), now = 17 * week, maxAge = Long.MAX_VALUE).size)
+    }
+
+    @Test fun plexListDecidesForPcItems() {
+        val sh = show("a", ep("1", 1, 1, offset = 600_000, viewed = 50), ep("2", 1, 2, offset = 600_000, viewed = 60))
+        val now = 100L * 24 * 3600_000
+        // Only episode 1 is in Plex's Continue Watching; episode 2 was last watched long ago.
+        assertEquals(listOf("1"), Watching.continueWatching(emptyList(), listOf(sh), plexIds = setOf("1"), now = now).map { it.id })
     }
 
     @Test fun watchedAtCredits() {

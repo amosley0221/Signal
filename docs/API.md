@@ -73,6 +73,10 @@ Full catalogue. All durations are milliseconds, all times are epoch ms. Optional
   }]
 }
 ```
+`continueWatching` (optional, only when the PC has Plex): ids of movies and episodes in Plex's own Continue Watching row,
+in Plex's order. The agent re-reads it every 5 minutes and shortly after a progress report. The app uses it for PC items and
+applies a 16-week cut-off to phone-only items.
+
 URLs in the catalogue are relative to the agent base URL; the app appends the token.
 
 ### Media

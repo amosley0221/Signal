@@ -167,6 +167,16 @@ export class Catalog {
   }
 
   /** Writes the cache. Calls made while a write is running are merged into one follow-up write. */
+  /** Re-reads Plex's Continue Watching row; rebuilds the catalogue when it changed. */
+  async refreshPlexContinue() {
+    if (!this.plex) return;
+    const keys = await this.plex.continueWatching().catch(() => null);
+    if (!keys) return;
+    if (JSON.stringify(keys) === JSON.stringify(this.plexContinue)) return;
+    this.plexContinue = keys;
+    this.markDirty();
+  }
+
   /** A song started/stopped streaming to the phone (scans slow down while any is playing). */
   streamStarted() { this.activeStreams++; }
   streamEnded() {
@@ -612,7 +622,20 @@ export class Catalog {
     movies.sort((a, b) => a.title.localeCompare(b.title));
     shows.sort((a, b) => a.title.localeCompare(b.title));
     this.index = index;
-    this.catalog = { generatedAt: Date.now(), tracks, videos, movies, shows };
+    // Plex's Continue Watching row, mapped to our ids (movies and episodes; several files of one movie all count).
+    let continueWatching;
+    if (this.plexContinue) {
+      const byKey = new Map();
+      for (const [id, it] of index) {
+        const k = it.plex?.ratingKey;
+        if (k && (it.type === 'movie' || it.type === 'episode')) {
+          if (!byKey.has(k)) byKey.set(k, []);
+          byKey.get(k).push(id);
+        }
+      }
+      continueWatching = this.plexContinue.flatMap((k) => byKey.get(k) || []);
+    }
+    this.catalog = { generatedAt: Date.now(), tracks, videos, movies, shows, ...(continueWatching ? { continueWatching } : {}) };
     this.dirty = false;
     return this.catalog;
   }
@@ -835,7 +858,13 @@ export class Catalog {
     if (this.plex && it.plex?.ratingKey) {
       const job = this.activity.add('plex', `${it.item.title}`, watched ? 'Mark watched in Plex' : `Progress ${Math.round(positionMs / 1000)} s → Plex`);
       (watched ? this.plex.scrobble(it.plex.ratingKey) : this.plex.progress(it.plex.ratingKey, positionMs, it.item.durationMs))
-        .then(() => job.done())
+        .then(() => {
+          job.done();
+          // Plex updates its Continue Watching row from this; pick it up soon (once per burst of reports).
+          clearTimeout(this.deckSoon);
+          this.deckSoon = setTimeout(() => this.refreshPlexContinue().catch(() => {}), 10_000);
+          this.deckSoon.unref?.();
+        })
         .catch((e) => job.fail(e));
     }
     return { status: 200, body: { ok: true } };

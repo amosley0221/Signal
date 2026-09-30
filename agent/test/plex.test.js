@@ -48,6 +48,7 @@ before(async () => {
     if (u.pathname === '/library/sections/2/all') {
       return json({ MediaContainer: { Metadata: [{ ratingKey: '200', title: 'The Ballast', year: 2024, summary: 'Boats.', contentRating: 'TV-14', Guid: [{ id: 'tvdb://9' }], thumb: '/library/metadata/200/thumb/1' }] } });
     }
+    if (u.pathname === '/hubs/continueWatching/items') return json({ MediaContainer: { Metadata: [{ ratingKey: '201' }] } });
     if (u.pathname.startsWith('/library/metadata/101/thumb')) { res.writeHead(200, { 'Content-Type': 'image/jpeg' }); return res.end('JPEGDATA'); }
     if (u.pathname === '/:/timeline' || u.pathname === '/:/scrobble') { res.writeHead(200); return res.end(); }
     res.writeHead(404); return res.end();
@@ -122,4 +123,11 @@ test('Plex.test reports connected / bad token / unreachable in plain words', asy
   const down = await Plex.test({ url: 'http://127.0.0.1:9', token: 'tok' }, { timeoutMs: 1500 });
   assert.equal(down.ok, false);
   assert.match(down.message, /didn't answer/);
+});
+
+test("Plex's Continue Watching row is passed to the phone as item ids", async () => {
+  await agent.catalog.refreshPlexContinue();
+  const c = await (await api('/api/catalog')).json();
+  const ep = c.shows[0].seasons[0].episodes[0];
+  assert.deepEqual(c.continueWatching, [ep.id]);
 });

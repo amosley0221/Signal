@@ -27,3 +27,20 @@ class DuplicatesTest {
         assertEquals(2, Duplicates.merge(l, DuplicateMode.PHONE).size)
     }
 }
+
+class MovieVersionsTest {
+    @Test fun sameTitleAndYearBecomeOnePosterWithVersions() {
+        val a = Movie(id = "a", title = "Scary Movie", year = 2026, width = 1920, size = 5)
+        val b = Movie(id = "b", title = "Scary Movie", year = 2026, width = 3840, size = 9)
+        val c = Movie(id = "c", title = "Scary Movie", year = 2000)
+        val out = MovieVersions.merge(listOf(a, c, b))
+        assertEquals(listOf("b", "c"), out.map { it.id })
+        assertEquals(listOf("a"), out[0].versions.map { it.id })
+    }
+
+    @Test fun theCopyYouAreWatchingIsShown() {
+        val a = Movie(id = "a", title = "X", year = 1, width = 1920, lastViewedAt = 50, viewOffsetMs = 90_000)
+        val b = Movie(id = "b", title = "X", year = 1, width = 3840)
+        assertEquals("a", MovieVersions.merge(listOf(a, b)).single().id)
+    }
+}

@@ -144,7 +144,18 @@ data class Movie(
     val folder: String? = null,
     /** Original file name (phone videos), used to read SxxEyy for TV. */
     val fileName: String? = null,
-)
+    /** Other copies of the same movie (another file or quality), shown as one poster. Filled in on the phone. */
+    val versions: List<Movie> = emptyList(),
+) {
+    /** Resolution label for picking a version, e.g. "4K", "1080p". */
+    val resolution: String? get() = when {
+        width >= 3200 || height >= 1800 -> "4K"
+        width >= 1800 || height >= 1000 -> "1080p"
+        width >= 1200 || height >= 700 -> "720p"
+        height > 0 -> "${height}p"
+        else -> null
+    }
+}
 
 @Serializable
 data class Episode(
@@ -210,6 +221,8 @@ data class Catalog(
     val videos: List<MusicVideo> = emptyList(),
     val movies: List<Movie> = emptyList(),
     val shows: List<Show> = emptyList(),
+    /** Plex's own Continue Watching row as item ids (movies and episodes), when the PC has Plex. */
+    val continueWatching: List<String>? = null,
 )
 
 @Serializable

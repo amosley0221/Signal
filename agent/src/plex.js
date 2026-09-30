@@ -132,6 +132,23 @@ export class Plex {
     return { items: byPath.size, shows: shows.size };
   }
 
+  /**
+   * Plex's own "Continue Watching" row (what the Plex home screen shows), as rating keys in order.
+   * Tries the current hub endpoints, then the older On Deck list. Null when none answers.
+   */
+  async continueWatching() {
+    for (const p of ['/hubs/continueWatching/items', '/hubs/home/continueWatching', '/library/onDeck']) {
+      try {
+        const j = await this.get(p, { count: 50 }, { timeoutMs: 15000 });
+        const items = j.MediaContainer?.Metadata || j.MediaContainer?.Hub?.[0]?.Metadata;
+        if (Array.isArray(items)) return items.map((m) => String(m.ratingKey));
+      } catch {
+        // try the next endpoint
+      }
+    }
+    return null;
+  }
+
   /** Children of a metadata item (seasons of a show, episodes of a season). */
   async children(ratingKey) {
     const j = await this.get(`/library/metadata/${ratingKey}/children`);

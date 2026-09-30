@@ -158,7 +158,11 @@ private fun Backdrop(c: Ctx, key: String, url: String?, height: Int) {
 
 @Composable
 fun MovieScreen(c: Ctx, id: String) {
-    val m = c.lib.movies.firstOrNull { it.id == id } ?: return Missing(c)
+    val m = c.lib.movie(id) ?: return Missing(c)
+    // Several copies of this movie: pick which file Play uses (defaults to the one on the poster).
+    val all = listOf(m) + m.versions
+    var pick by remember(id) { mutableStateOf(m.id) }
+    val chosen = all.firstOrNull { it.id == pick } ?: m
     LazyColumn(Modifier.fillMaxSize()) {
         item { Backdrop(c, m.title + "bd", m.backdropUrl, 300) }
         item {
@@ -183,11 +187,29 @@ fun MovieScreen(c: Ctx, id: String) {
                         m.viewOffsetMs > 60_000 -> "Resume · ${Fmt.dur(m.durationMs - m.viewOffsetMs)} left"
                         else -> "Play"
                     }
-                    FilledBtn(label, icon = Icons.Filled.PlayArrow, modifier = Modifier.weight(1f)) { c.st.push(Screen.Video(m.id, VideoKind.MOVIE)) }
+                    FilledBtn(label, icon = Icons.Filled.PlayArrow, modifier = Modifier.weight(1f)) { c.st.push(Screen.Video(chosen.id, VideoKind.MOVIE)) }
                     if (m.origin == Origin.PC) {
                         Spacer(Modifier.width(10.dp))
                         Box(Modifier.size(40.dp).border(1.dp, C.HairStrong), contentAlignment = Alignment.Center) {
                             DlButton(c, m.id, m.origin, 40) { c.repo.download(m); c.toast("Downloading ${m.title}") }
+                        }
+                    }
+                }
+                if (all.size > 1) {
+                    Spacer(Modifier.height(12.dp))
+                    Mono("${all.size} versions", color = C.Muted)
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        all.forEach { v ->
+                            val on = v.id == chosen.id
+                            val label = listOfNotNull(
+                                v.resolution, v.container?.uppercase(), if (v.size > 0) Fmt.bytes(v.size) else null,
+                                if (v.origin == Origin.PHONE) "On phone" else null,
+                            ).joinToString(" · ").ifEmpty { "Version" }
+                            Box(
+                                Modifier.background(if (on) C.Amber else Color.Transparent).border(1.dp, if (on) C.Amber else C.HairStrong)
+                                    .clickable { pick = v.id }.padding(horizontal = 10.dp, vertical = 7.dp),
+                            ) { Text(label, style = T.ui(12.5.sp, 600), color = if (on) C.OnAmber else C.Fg) }
                         }
                     }
                 }
@@ -222,8 +244,9 @@ fun ShowScreen(c: Ctx, id: String) {
     val show = c.lib.shows.firstOrNull { it.id == id } ?: return Missing(c)
     val eps = show.allEpisodes
     // Same rules as the Continue watching / Up next rows.
-    val next = com.amosley.signal.core.Watching.continueWatching(emptyList(), listOf(show)).firstOrNull()?.episode
-        ?: com.amosley.signal.core.Watching.upNext(listOf(show)).firstOrNull()?.episode
+    // The show page always offers where you left off, however long ago (no Continue Watching cut-off here).
+    val next = com.amosley.signal.core.Watching.continueWatching(emptyList(), listOf(show), maxAge = Long.MAX_VALUE).firstOrNull()?.episode
+        ?: com.amosley.signal.core.Watching.upNext(listOf(show), maxAge = Long.MAX_VALUE).firstOrNull()?.episode
         ?: eps.firstOrNull { !it.watched } ?: eps.firstOrNull()
     val seasonNo = c.st.season ?: next?.season ?: show.seasons.firstOrNull()?.number ?: 1
     val season = show.seasons.firstOrNull { it.number == seasonNo }
@@ -325,7 +348,7 @@ private data class VideoSource(
 private fun resolve(c: Ctx, s: Screen.Video): VideoSource? {
     fun uri(id: String, origin: Origin, phoneUri: String) = c.repo.playUri(id, origin, phoneUri)
     return when (s.kind) {
-        VideoKind.MOVIE -> c.lib.movies.firstOrNull { it.id == s.id }?.let { m: Movie ->
+        VideoKind.MOVIE -> c.lib.movie(s.id)?.let { m: Movie ->
             VideoSource(m.id, m.title, listOfNotNull(m.year?.toString(), m.certificate).joinToString(" · "), uri(m.id, m.origin, m.uri),
                 if (m.origin == Origin.PC) c.repo.streamUrl(m.id) else null, if (m.watched) 0 else m.viewOffsetMs, m.durationMs, m.subtitles, m.chapters, m.width, m.height, m.origin, null)
         }

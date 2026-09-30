@@ -108,7 +108,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
             val tried = java.util.Collections.synchronizedSet(HashSet<String>())
             fun add(r: SonosRoom) = synchronized(found) {
                 found[r.uuid] = r
-                _rooms.value = found.values.sortedBy { it.name }
+                _rooms.value = roomsOnly(found.values)
             }
             suspend fun check(location: String) {
                 if (!tried.add(location)) return
@@ -140,7 +140,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
             }
             _lastScan.value = (if (wifiIp == null) "Not on Wi-Fi" else "Searched Wi-Fi $wifiIp · $replies Sonos replies · $open1400 found by network check") +
                 (if (synchronized(found) { found.isEmpty() }) lastError?.let { " · last error: $it" } ?: "" else "")
-            val all = synchronized(found) { found.values.sortedBy { it.name } }
+            val all = roomsOnly(synchronized(found) { found.values.toList() })
             _rooms.value = all
             if (all.isNotEmpty()) prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
             _scanning.value = false
@@ -201,10 +201,28 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         }
     }
 
-    /** Description URLs of every player in [room]'s household, from ZoneGroupTopology. */
+    /** Rooms you can play to (not surround speakers, subs or the second speaker of a stereo pair); null if unknown. */
+    @Volatile private var playable: Set<String>? = null
+
+    /** Description URLs of every player in [room]'s household, from ZoneGroupTopology (also learns which are rooms). */
     private suspend fun topologyLocations(room: SonosRoom): List<String> {
         val xml = soap(room, "/ZoneGroupTopology/Control", "ZoneGroupTopology", "GetZoneGroupState", emptyList())
-        return Regex("Location=(?:&quot;|\")(http://[^&\"]+)").findAll(xml).map { it.groupValues[1] }.distinct().toList()
+        val plain = xml.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+        // Satellites (surrounds, subs) are nested <Satellite> tags; hidden members carry Invisible="1".
+        val rooms = Regex("<ZoneGroupMember\\b([^>]*)>").findAll(plain).mapNotNull { m ->
+            val attrs = m.groupValues[1]
+            val uuid = Regex("UUID=\"([^\"]+)\"").find(attrs)?.groupValues?.get(1) ?: return@mapNotNull null
+            if (Regex("Invisible=\"1\"").containsMatchIn(attrs)) null else uuid
+        }.toSet()
+        if (rooms.isNotEmpty()) playable = rooms
+        return Regex("Location=\"(http://[^\"]+)\"").findAll(plain).map { it.groupValues[1] }.distinct().toList()
+    }
+
+    /** One entry per room: drop satellites/pair secondaries (from the topology), else keep the first of each name. */
+    private fun roomsOnly(all: Collection<SonosRoom>): List<SonosRoom> {
+        val p = playable
+        val list = if (p != null && all.any { it.uuid in p }) all.filter { it.uuid in p } else all.toList()
+        return list.groupBy { it.name }.map { (_, g) -> g.first() }.sortedBy { it.name }
     }
 
     private fun wifiAddress(): Inet4Address? {
@@ -224,7 +242,7 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         runCatching { topologyLocations(room) }.getOrDefault(emptyList()).forEach { loc ->
             runCatching { describe(loc) }.getOrNull()?.let { found[it.uuid] = it }
         }
-        val all = found.values.sortedBy { it.name }
+        val all = roomsOnly(found.values)
         _rooms.value = all
         prefs.edit().putString("rooms", all.joinToString("\n") { "${it.uuid}\t${it.name}\t${it.model}\t${it.ip}" }).apply()
         "Added ${all.size} Sonos room${if (all.size != 1) "s" else ""}"

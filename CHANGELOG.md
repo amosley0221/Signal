@@ -3,6 +3,22 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.22] - 2026-09-30
+
+### Continue Watching matches Plex
+- **Continue Watching** and **Up Next** for PC movies and shows now follow Plex's own Continue Watching row. Anything Plex has dropped (old, or removed with "Remove from Continue Watching") no longer shows. Something you just started in Signal appears right away and stays once Plex lists it.
+- Videos only on the phone (and PCs without Plex) drop off after 16 weeks without watching, like Plex's default.
+- A show's page still offers the episode where you left off, however long ago.
+- **Signal Agent (PC):** reads Plex's Continue Watching row every 5 minutes, and again shortly after you watch something in Signal. Update the agent to get this.
+
+### Duplicate movies show once
+- Several files of the same movie (same title and year, e.g. a 4K and a 1080p copy) now show as one poster in All movies, Recently added and Continue watching.
+- The movie page lists the versions (resolution, format, size, on phone) so you can pick which one plays.
+
+### Sonos rooms
+- Each Sonos room is listed once. Surround speakers, subs and the second speaker of a stereo pair no longer show up as separate "rooms"; Signal plays to the room's main speaker.
+- Fixed "Sonos Sonos Roam" labels.
+
 ## [1.0.21] - 2026-09-30
 
 ### Sonos plays songs stored on the phone again

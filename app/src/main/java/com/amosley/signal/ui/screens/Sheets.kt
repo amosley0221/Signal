@@ -600,7 +600,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
             rooms.forEach { r ->
                 val active = activeSonos?.room?.uuid == r.uuid
                 val grouped = r.uuid in c.st.sonosGroup
-                OutputRow(r.name, "Sonos ${r.model} · up to 24-bit / 48 kHz", active || grouped, trailing = {
+                OutputRow(r.name, "${if (r.model.startsWith("Sonos", true)) r.model else "Sonos ${r.model}"} · up to 24-bit / 48 kHz", active || grouped, trailing = {
                     if (activeSonos != null && !active) {
                         GroupToggle(grouped) {
                             scope.launch {
