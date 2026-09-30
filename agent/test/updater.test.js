@@ -54,14 +54,14 @@ describe('swapAndRestart', () => {
     let started = null;
     await swapAndRestart({ newFile: '/tmp/new.exe', execPath: '/a/SignalAgent.exe', fsOps: f.fsOps, spawnFn: (cmd, args) => { started = [cmd, args]; return { unref() {} }; } });
     assert.ok(f.files.has('/a/SignalAgent.exe'));
-    assert.ok(f.files.has('/a/SignalAgent.old.exe'));
+    assert.ok(f.files.has(oldExePath('/a/SignalAgent.exe')));
     assert.deepEqual(started, ['/a/SignalAgent.exe', ['--updated', '--no-browser']]);
   });
   test('moving the new file fails → old version is put back', async () => {
     const f = makeFs({ rename: (a) => a === '/tmp/new.exe', copy: true });
     await assert.rejects(swapAndRestart({ newFile: '/tmp/new.exe', execPath: '/a/SignalAgent.exe', fsOps: f.fsOps, spawnFn: () => ({}) }), /new version in place/);
     assert.ok(f.files.has('/a/SignalAgent.exe'));
-    assert.ok(!f.files.has('/a/SignalAgent.old.exe'));
+    assert.ok(!f.files.has(oldExePath('/a/SignalAgent.exe')));
   });
   test('cannot rename the running exe → nothing changes', async () => {
     const f = makeFs({ rename: (a) => a === '/a/SignalAgent.exe' });
