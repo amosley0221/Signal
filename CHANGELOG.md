@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.11] - 2026-09-30
+
+- The "PC name · synced X min ago" line no longer appears at the top of Music, Movies and TV Shows. PC connection status is now shown only in Settings.
+
 ## [1.0.10] - 2026-09-30
 
 ### Posters and details for movies and shows on your phone

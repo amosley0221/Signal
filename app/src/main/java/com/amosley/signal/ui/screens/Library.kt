@@ -122,8 +122,7 @@ fun LibraryPane(c: Ctx) {
                         SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                StatusLine(c)
+                // PC connection status lives in Settings only.
                 if (c.unfolded) {
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth().border(1.dp, C.HairStrong)) {
