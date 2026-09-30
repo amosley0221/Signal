@@ -53,6 +53,7 @@ import com.amosley.signal.ui.screens.MovieScreen
 import com.amosley.signal.ui.screens.NowPlayingContent
 import com.amosley.signal.ui.screens.PairScreen
 import com.amosley.signal.ui.screens.PhoneFoldersScreen
+import com.amosley.signal.ui.screens.SettingsScreen
 import com.amosley.signal.ui.screens.PlaylistScreen
 import com.amosley.signal.ui.screens.SearchScreen
 import com.amosley.signal.ui.screens.SheetHost
@@ -164,6 +165,7 @@ private fun ScreenContent(c: Ctx, screen: Screen) {
         is Screen.Search -> SearchScreen(c)
         is Screen.Pair -> PairScreen(c)
         is Screen.PhoneFolders -> PhoneFoldersScreen(c)
+        is Screen.Settings -> SettingsScreen(c)
         is Screen.Video -> Unit
     }
 }

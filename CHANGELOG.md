@@ -5,8 +5,12 @@ The GitHub release notes for each APK come from the matching section below.
 
 ## [1.0.1] - 2026-09-30
 
+### New Settings tab
+- The bottom **Sync** tab is now **Settings**. PC sync is the first item in Settings, and your phone folders are listed right below it.
+  On the unfolded screen, open Settings with the gear next to search.
+
 ### Choose which phone folders to use
-- New **Phone folders** screen (Sync → This phone → Choose folders, or from the prompt in your library).
+- In **Settings**, set each folder on your phone to Music, Music Videos, Movies or TV Shows. You can also get there from the prompt in your library.
   Set each folder to Music, Music Videos, Movies or TV Shows. Folders you leave Off stay hidden, so ringtones,
   recordings and the phone's sample music no longer show up.
 - Choosing a folder includes the folders inside it.

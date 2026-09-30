@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -97,7 +98,7 @@ fun StatusLine(c: Ctx, modifier: Modifier = Modifier) {
 @Composable
 fun LibraryPane(c: Ctx) {
     val st = c.st
-    val section = if (c.unfolded && st.section == Section.SYNC) Section.MUSIC else st.section
+    val section = if (c.unfolded && st.section == Section.SETTINGS) Section.MUSIC else st.section
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
@@ -109,6 +110,10 @@ fun LibraryPane(c: Ctx) {
                         Spacer(Modifier.width(8.dp))
                     }
                     SquareBtn(Icons.Filled.Search, size = 32.dp, desc = "Search") { st.push(Screen.Search) }
+                    if (c.unfolded) {
+                        Spacer(Modifier.width(8.dp))
+                        SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 StatusLine(c)
@@ -140,7 +145,7 @@ fun LibraryPane(c: Ctx) {
             }
             Section.MOVIES -> movies(c)
             Section.TV -> shows(c)
-            Section.SYNC -> Unit
+            Section.SETTINGS -> Unit
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -200,7 +205,7 @@ private fun LazyListScope.recent(c: Ctx) {
                         Spacer(Modifier.height(3.dp))
                         Text("Pick which folders hold your music, music videos, movies and TV", style = T.meta, color = C.Muted)
                     }
-                    OutlineBtn("Choose", color = C.AmberText, border = C.Amber) { c.st.push(Screen.PhoneFolders) }
+                    OutlineBtn("Choose", color = C.AmberText, border = C.Amber) { c.st.goSection(Section.SETTINGS) }
                 }
             }
         }

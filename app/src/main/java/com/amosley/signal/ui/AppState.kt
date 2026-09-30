@@ -8,7 +8,7 @@ import androidx.lifecycle.ViewModel
 import com.amosley.signal.SignalApp
 import com.amosley.signal.core.Track
 
-enum class Section(val label: String) { MUSIC("Music"), MOVIES("Movies"), TV("TV Shows"), SYNC("Sync") }
+enum class Section(val label: String) { MUSIC("Music"), MOVIES("Movies"), TV("TV Shows"), SETTINGS("Settings") }
 
 enum class MusicTab(val label: String) {
     RECENT("Recently Added"), SONGS("Songs"), ALBUMS("Albums"), ARTISTS("Artists"), PLAYLISTS("Playlists"), VIDEOS("Music Videos")
@@ -30,6 +30,7 @@ sealed interface Screen {
     data object Pair : Screen
     data object Search : Screen
     data object PhoneFolders : Screen
+    data object Settings : Screen
 
     companion object {
         const val NEEDS_ARTIST = "smart:needs-artist"
@@ -94,7 +95,7 @@ class AppState : ViewModel() {
     fun goSection(s: Section) {
         section = s
         stack.clear()
-        stack.add(if (s == Section.SYNC) Screen.Sync else Screen.Library)
+        stack.add(if (s == Section.SETTINGS) Screen.Settings else Screen.Library)
     }
 
     fun openArtist(name: String?) {
