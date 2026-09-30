@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 export const STARTUP_FILE_NAME = 'Signal Agent.vbs';
 
@@ -27,6 +27,33 @@ export function openBrowser(url, { platform = process.platform } = {}) {
   } catch {
     return false;
   }
+}
+
+/**
+ * The windowless Windows program has no console to print errors to: show a native message box and
+ * wait until it is closed. The text travels as -EncodedCommand (UTF-16LE base64), so no quoting issues.
+ */
+export function showMessageBox(text, { title = 'Signal Agent', platform = process.platform, spawnSyncFn = spawnSync } = {}) {
+  if (platform !== 'win32') return false;
+  const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  const script = `Add-Type -AssemblyName PresentationFramework; [void][System.Windows.MessageBox]::Show(${q(text)}, ${q(title)}, 'OK', 'Error')`;
+  try {
+    const r = spawnSyncFn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, stdio: 'ignore' });
+    return !r.error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Should the setup page open in the browser at startup?
+ * `--no-browser` never, `--open-browser` always. The packaged program opens it only on the very first
+ * run or while no libraries are set up; from source it only opens with `--open-browser`.
+ */
+export function shouldOpenBrowser({ argv = [], packaged, needsSetup, firstRun }) {
+  if (argv.includes('--no-browser')) return false;
+  if (argv.includes('--open-browser')) return true;
+  return !!packaged && (!!needsSetup || !!firstRun);
 }
 
 // ---- Start with Windows ---------------------------------------------------------------------------

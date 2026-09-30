@@ -4,6 +4,8 @@
 //   2. node --experimental-sea-config turns that into a SEA blob
 //   3. a copy of the running node binary gets the blob injected with postject
 // Output: dist/SignalAgent.exe on Windows, dist/signal-agent elsewhere (the SEA runs on the OS/arch it was built on).
+// The .exe is then switched to the Windows GUI subsystem so it runs without a console window; it logs
+// to <dataDir>/agent.log instead. The Linux/macOS binaries are left as they are.
 //
 //   npm run build:exe                  build the bundle + executable (each is smoke-tested)
 //   npm run build:exe -- --bundle-only only dist/signal-agent.cjs
@@ -13,6 +15,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { patchPeFileSubsystem } from './pe-subsystem.mjs';
 
 const AGENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(AGENT_DIR, 'dist');
@@ -26,7 +29,8 @@ const FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
 /**
  * Start `cmd args… --config <temp> --no-browser` with a throwaway config on a random port, wait for the
- * console banner, check GET /api/info, then stop it. Throws on failure.
+ * banner (on stdout, or in data/agent.log for the windowless .exe), check GET /api/info, then stop it.
+ * Throws on failure.
  */
 async function smokeTest(cmd, args) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'signal-agent-smoke-'));
@@ -36,12 +40,14 @@ async function smokeTest(cmd, args) {
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
+  const logFile = path.join(tmp, 'data', 'agent.log');
+  const logText = () => { try { return fs.readFileSync(logFile, 'utf8'); } catch { return ''; } };
   try {
     const port = await new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('timed out waiting for the agent to start')), 30000);
       child.on('exit', (code) => { clearTimeout(t); reject(new Error(`exited early with code ${code}`)); });
       const poll = setInterval(() => {
-        const m = /Signal Agent is running\. Setup: http:\/\/localhost:(\d+)\//.exec(out);
+        const m = /Signal Agent is running\. Setup: http:\/\/localhost:(\d+)\//.exec(out + logText());
         if (m) { clearInterval(poll); clearTimeout(t); resolve(Number(m[1])); }
       }, 100);
     });
@@ -49,7 +55,7 @@ async function smokeTest(cmd, args) {
     if (info.name !== 'SMOKE-TEST' || info.version !== pkg.version) throw new Error(`unexpected /api/info: ${JSON.stringify(info)}`);
     console.log(`  OK — GET /api/info on port ${port}: ${JSON.stringify(info)}`);
   } catch (e) {
-    console.error(out);
+    console.error(out + logText());
     throw new Error(`smoke test failed for ${cmd}: ${e.message}`);
   } finally {
     child.removeAllListeners('exit');
@@ -172,6 +178,17 @@ if (isMac && has('codesign', ['--help'])) {
 }
 
 fs.rmSync(BLOB, { force: true });
+
+if (EXE.toLowerCase().endsWith('.exe')) {
+  step('PE header: console → GUI subsystem (no console window)');
+  try {
+    const off = patchPeFileSubsystem(EXE);
+    console.log(`  Subsystem at 0x${off.toString(16)}: 3 (WINDOWS_CUI) → 2 (WINDOWS_GUI)`);
+  } catch (e) {
+    console.error(`Could not switch ${path.basename(EXE)} to the GUI subsystem: ${e.message}`);
+    process.exit(1);
+  }
+}
 
 if (!process.argv.includes('--no-test')) {
   step(`smoke test: ${path.relative(AGENT_DIR, EXE)}`);
