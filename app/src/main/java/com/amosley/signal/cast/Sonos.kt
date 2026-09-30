@@ -444,6 +444,11 @@ class SonosOutput(
 
     override fun seek(ms: Long) { if (loaded) run { sonos.seek(room, ms) } }
 
+    // Volume of the whole group this room leads (grouped rooms move together, like the Sonos app).
+    override val supportsVolume: Boolean get() = true
+    override suspend fun setVolume(volume: Int) = sonos.setGroupVolume(room, volume)
+    override suspend fun volume(): Int? = sonos.groupVolume(room)
+
     override fun release() {
         poll?.cancel()
         if (loaded) scope.launch { runCatching { sonos.pause(room) } }

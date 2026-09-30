@@ -39,6 +39,9 @@ data class PlayerUi(
     val error: String? = null,
 )
 
+/** Volume change per press of the phone's volume buttons while playing on a speaker (0–100 scale). */
+private const val VOLUME_STEP = 3
+
 enum class OutputKind { PHONE, CAST, SONOS }
 
 /** A speaker / TV that plays one item at a time while the phone keeps the queue. */
@@ -51,6 +54,10 @@ interface RemoteOutput {
     fun pause()
     fun seek(ms: Long)
     fun release()
+    /** Speakers whose volume the phone's volume buttons can control (Sonos: the whole group). */
+    val supportsVolume: Boolean get() = false
+    suspend fun setVolume(volume: Int) {}
+    suspend fun volume(): Int? = null
 }
 
 data class RemoteItem(val url: String, val title: String, val artist: String?, val album: String?, val artUrl: String?, val mime: String, val durationMs: Long, val isVideo: Boolean = false)
@@ -295,6 +302,68 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
 
     val remoteOutput: RemoteOutput? get() = remote
 
+    // ---- Phone volume buttons → speaker volume ----------------------------------------------------
+
+    private val _remoteVolume = MutableStateFlow(30)
+    /** Volume (0–100) of the speaker or Sonos group being played on. */
+    val remoteVolume: StateFlow<Int> = _remoteVolume
+    private val sessionListeners = java.util.concurrent.CopyOnWriteArraySet<Player.Listener>()
+    private val remoteDevice = androidx.media3.common.DeviceInfo.Builder(androidx.media3.common.DeviceInfo.PLAYBACK_TYPE_REMOTE)
+        .setMinVolume(0).setMaxVolume(100).build()
+    private val volumeCommands = listOf(
+        Player.COMMAND_GET_DEVICE_VOLUME, Player.COMMAND_SET_DEVICE_VOLUME, Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
+        Player.COMMAND_ADJUST_DEVICE_VOLUME, Player.COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
+    )
+    private fun remoteVolumeActive() = remote?.supportsVolume == true
+
+    /** Sets the speaker volume (from the Play on slider or the phone's buttons) and tells Android's volume panel. */
+    fun setRemoteVolume(volume: Int, send: Boolean = true) {
+        val v = volume.coerceIn(0, 100)
+        _remoteVolume.value = v
+        sessionListeners.forEach { it.onDeviceVolumeChanged(v, false) }
+        val r = remote ?: return
+        if (send && r.supportsVolume) scope.launch { runCatching { r.setVolume(v) } }
+    }
+
+    private fun notifyDeviceChanged() {
+        val info = sessionPlayer.deviceInfo
+        val cmds = sessionPlayer.availableCommands
+        sessionListeners.forEach {
+            it.onDeviceInfoChanged(info)
+            it.onAvailableCommandsChanged(cmds)
+            it.onDeviceVolumeChanged(sessionPlayer.deviceVolume, false)
+        }
+    }
+
+    /**
+     * The player the MediaSession (notification, lock screen, volume keys) sees. While playing on a Sonos speaker it
+     * reports a remote device, so Android sends the phone's volume buttons to the speaker instead of the phone.
+     */
+    val sessionPlayer: Player = object : androidx.media3.common.ForwardingPlayer(exo) {
+        override fun addListener(listener: Player.Listener) { sessionListeners += listener; super.addListener(listener) }
+        override fun removeListener(listener: Player.Listener) { sessionListeners -= listener; super.removeListener(listener) }
+        override fun getDeviceInfo() = if (remoteVolumeActive()) remoteDevice else super.getDeviceInfo()
+        override fun getDeviceVolume() = if (remoteVolumeActive()) _remoteVolume.value else super.getDeviceVolume()
+        override fun isDeviceMuted() = if (remoteVolumeActive()) false else super.isDeviceMuted()
+        override fun getAvailableCommands(): Player.Commands =
+            if (!remoteVolumeActive()) super.getAvailableCommands()
+            else super.getAvailableCommands().buildUpon().addAll(*volumeCommands.toIntArray()).build()
+        override fun isCommandAvailable(command: Int) =
+            if (remoteVolumeActive() && command in volumeCommands) true else super.isCommandAvailable(command)
+        override fun setDeviceVolume(volume: Int, flags: Int) { if (remoteVolumeActive()) setRemoteVolume(volume) else super.setDeviceVolume(volume, flags) }
+        @Deprecated("Deprecated in Java")
+        @Suppress("DEPRECATION")
+        override fun setDeviceVolume(volume: Int) { if (remoteVolumeActive()) setRemoteVolume(volume) else super.setDeviceVolume(volume) }
+        override fun increaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value + VOLUME_STEP) else super.increaseDeviceVolume(flags) }
+        @Deprecated("Deprecated in Java")
+        @Suppress("DEPRECATION")
+        override fun increaseDeviceVolume() { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value + VOLUME_STEP) else super.increaseDeviceVolume() }
+        override fun decreaseDeviceVolume(flags: Int) { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value - VOLUME_STEP) else super.decreaseDeviceVolume(flags) }
+        @Deprecated("Deprecated in Java")
+        @Suppress("DEPRECATION")
+        override fun decreaseDeviceVolume() { if (remoteVolumeActive()) setRemoteVolume(_remoteVolume.value - VOLUME_STEP) else super.decreaseDeviceVolume() }
+    }
+
     fun setRemote(output: RemoteOutput?) {
         if (output === remote) return
         val pos = if (remote != null) _ui.value.positionMs else exo.currentPosition
@@ -302,6 +371,9 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         remoteJob?.cancel()
         remote?.release()
         remote = output
+        notifyDeviceChanged()
+        // Start from the speaker's current volume, so the first button press doesn't jump.
+        if (output?.supportsVolume == true) scope.launch { runCatching { output.volume() }.getOrNull()?.let { if (remote === output) setRemoteVolume(it, send = false) } }
         if (output == null) {
             exo.seekTo(pos)
             if (wasPlaying) exo.play()

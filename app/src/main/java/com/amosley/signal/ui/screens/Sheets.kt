@@ -574,6 +574,9 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
         onDispose { app.cast.stopScan() }
     }
     val activeSonos = app.hub.remoteOutput as? SonosOutput
+    // Keep the slider in step with the phone's volume buttons.
+    val remoteVol by app.hub.remoteVolume.collectAsState()
+    LaunchedEffect(remoteVol) { if (activeSonos != null) c.st.sonosVolume = remoteVol }
     val note = when {
         video -> "Video and audio on the TV · phone is the remote"
         c.player.outputKind == OutputKind.SONOS -> "Sonos streams directly from ${c.pcName} · hi-res files play at 48 kHz"
@@ -618,7 +621,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                     if (c.player.outputKind == OutputKind.CAST) app.cast.disconnect()
                     c.st.sonosGroup = emptySet()
                     app.hub.setRemote(SonosOutput(app.sonos, r, app.scope) { app.toast(it) })
-                    scope.safeLaunch { runCatching { app.sonos.groupVolume(r) }.getOrNull()?.let { c.st.sonosVolume = it } }
+                    scope.safeLaunch { runCatching { app.sonos.groupVolume(r) }.getOrNull()?.let { c.st.sonosVolume = it; app.hub.setRemoteVolume(it, send = false) } }
                     c.toast("Playing on ${r.name}")
                 }
             }
@@ -637,7 +640,7 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                 Mono("Volume · ${names.joinToString(" + ")}", color = C.Muted)
                 Slider(
                     value = c.st.sonosVolume.toFloat(), onValueChange = { c.st.sonosVolume = it.roundToInt() },
-                    onValueChangeFinished = { scope.safeLaunch { runCatching { app.sonos.setGroupVolume(activeSonos.room, c.st.sonosVolume) } } },
+                    onValueChangeFinished = { app.hub.setRemoteVolume(c.st.sonosVolume) },
                     valueRange = 0f..100f,
                     colors = SliderDefaults.colors(thumbColor = C.Amber, activeTrackColor = C.Amber, inactiveTrackColor = C.HairStrong),
                 )

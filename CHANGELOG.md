@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.39] - 2026-10-01
+
+- **Sonos:** the phone's volume buttons now control the speaker while music plays on Sonos, including the whole group when rooms are grouped. The phone's volume panel shows the speaker's volume, and the slider in **Play on** follows along. On the phone speaker or headphones, the buttons work as usual.
+
 ## [1.0.38] - 2026-10-01
 
 - **Sonos:** fixed songs sometimes not starting on a speaker until something else nudged it, followed by a "couldn't load this song" message. The first Play command could arrive before the speaker had finished loading the song, and the speaker ignored it. Signal now sends Play again every few seconds, up to four more times, before deciding a song couldn't load. It also keeps watching the speaker even if that first Play is refused.

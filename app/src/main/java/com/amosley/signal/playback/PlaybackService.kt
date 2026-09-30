@@ -18,7 +18,8 @@ class PlaybackService : MediaSessionService() {
             this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, hub.exo).setSessionActivity(open).build()
+        // sessionPlayer = the ExoPlayer, plus remote volume while playing on Sonos (phone volume buttons → speaker).
+        session = MediaSession.Builder(this, hub.sessionPlayer).setSessionActivity(open).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
