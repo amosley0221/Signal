@@ -3,6 +3,18 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.18] - 2026-09-30
+
+### Artists with featured guests
+- Songs by "21 Savage & Doja Cat", "21 Savage, Burna Boy & Metro Boomin" or "21 Savage feat. Drake" are now listed under **21 Savage** instead of as separate artists.
+- The album artist tag is used when a song has one. A name like "Earth, Wind & Fire" or "Simon & Garfunkel" stays whole unless its first name is also an artist in your library on its own.
+- Tapping the artist on a song opens the main artist's page.
+
+### Smoother streaming from the PC
+- Wi-Fi stays awake while a song streams from the PC. Before, it could nap with the screen off and the sound would cut out.
+- Songs load further ahead (up to 5 minutes, instead of 50 seconds) so a busy PC or a Wi-Fi hiccup doesn't interrupt playback.
+- Downloads in the background no longer make the app rebuild the whole library several times a second, which could starve audio playback on big libraries.
+
 ## [1.0.17] - 2026-09-30
 
 ### No more duplicate songs

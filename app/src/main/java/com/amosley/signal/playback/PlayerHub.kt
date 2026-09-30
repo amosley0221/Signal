@@ -66,6 +66,16 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, OkHttpDataSource.Factory(repo.http))))
         .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
         .setHandleAudioBecomingNoisy(true)
+        // Keep Wi-Fi awake while streaming from the PC (otherwise it naps with the screen off and audio drops out).
+        .setWakeMode(C.WAKE_MODE_NETWORK)
+        // Read further ahead than the default 50 s, so a busy PC or a Wi-Fi hiccup doesn't interrupt the song.
+        .setLoadControl(
+            androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setBufferDurationsMs(120_000, 300_000, 2_500, 5_000)
+                .setTargetBufferBytes(64 * 1024 * 1024)
+                .setPrioritizeTimeOverSizeThresholds(false)
+                .build(),
+        )
         .setSeekBackIncrementMs(10_000)
         .setSeekForwardIncrementMs(10_000)
         .build()

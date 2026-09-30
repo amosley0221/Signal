@@ -89,7 +89,7 @@ class Ctx(
     fun albumArt(a: com.amosley.signal.core.Album): Any? = repo.albumArtFile(a.key) ?: a.artTrack?.let { fileArt(it) }
 
     /** Artist picture: one you set or generated, else the art of one of their songs. */
-    fun artistArt(name: String): Any? = repo.artistArtFile(name) ?: lib.tracks.firstOrNull { it.artist == name }?.let { art(it) }
+    fun artistArt(name: String): Any? = repo.artistArtFile(name) ?: lib.artistTracks(name).firstOrNull()?.let { art(it) }
 
     private fun fileArt(t: Track): Any? = when (t.origin) {
         Origin.PC -> if (t.hasArt) repo.artUrl(t.id) else null

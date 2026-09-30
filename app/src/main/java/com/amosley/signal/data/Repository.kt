@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -63,7 +64,11 @@ data class LibraryView(
     val movies: List<Movie> = emptyList(),
     val shows: List<Show> = emptyList(),
     val artists: List<Pair<String, Int>> = emptyList(),
-)
+    /** Track id → main artist (features folded in), see ArtistNames. */
+    val artistOf: Map<String, String> = emptyMap(),
+) {
+    fun artistTracks(name: String): List<Track> = tracks.filter { (artistOf[it.id] ?: it.artist) == name || it.artist == name }
+}
 
 @Serializable
 data class TagConflict(val trackId: String, val title: String, val phoneArtist: String, val pcArtist: String)
@@ -159,10 +164,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     val library: StateFlow<LibraryView> = combine(
         combine(_catalog, _localTracks, _localVideos) { c, lt, lv -> Triple(c, lt, lv) },
-        combine(_overrides, _edits, _progress) { o, e, pr -> Triple(o, e, pr) }, _settings, downloads.states,
+        // Only finished downloads matter here (and only offline): don't rebuild the whole library on every progress tick.
+        combine(_overrides, _edits, _progress) { o, e, pr -> Triple(o, e, pr) }, _settings,
+        combine(_settings, downloads.states) { s, m -> if (s.offline) m.filterValues { it is DlState.Done }.keys else emptySet() }.distinctUntilChanged(),
         combine(_movieInfo, _showInfo) { m, sh -> m to sh },
-    ) { (cat, localTracks, localVideos), (overrides, edits, progress), settings, dl, (movieInfo, showInfo) ->
-        buildView(cat, localTracks, localVideos, overrides, settings, dl.keys, edits, progress, movieInfo, showInfo)
+    ) { (cat, localTracks, localVideos), (overrides, edits, progress), settings, dlKeys, (movieInfo, showInfo) ->
+        buildView(cat, localTracks, localVideos, overrides, settings, dlKeys, edits, progress, movieInfo, showInfo)
     }.stateIn(scope, SharingStarted.Eagerly, LibraryView())
 
     private fun buildView(cat: Catalog, localTracks: List<Track>, localVideos: List<Movie>, overrides: Map<String, String>, s: Settings, dlKeys: Set<String>, edits: Map<String, TrackEdit> = emptyMap(), progress: Map<String, WatchProgress> = emptyMap(),
@@ -194,8 +201,9 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             if (!s.offline) show else show.copy(seasons = show.seasons.map { se -> se.copy(episodes = se.episodes.filter { it.uri.isNotEmpty() || downloads.isDownloaded(it.id) }) }.filter { it.episodes.isNotEmpty() })
                 .takeIf { it.seasons.isNotEmpty() }
         }
-        val artists = tracks.mapNotNull { it.artist }.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
-        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists)
+        val artistOf = com.amosley.signal.core.ArtistNames.primary(tracks)
+        val artists = artistOf.values.groupingBy { it }.eachCount().toList().sortedBy { it.first.lowercase() }
+        return LibraryView(tracks, groupAlbums(tracks, videos), videos, movies, shows, artists, artistOf)
     }
 
     fun updateSettings(f: (Settings) -> Settings) {

@@ -201,7 +201,7 @@ class Downloads(
                         raf.write(buf, 0, n)
                         written += n
                         val now = System.currentTimeMillis()
-                        if (now - lastEmit > 300) {
+                        if (now - lastEmit > 1000) {
                             lastEmit = now
                             val p = if (total > 0) written.toFloat() / total else 0f
                             _states.update { it + (req.id to DlState.Running(p.coerceIn(0f, 0.99f))) }

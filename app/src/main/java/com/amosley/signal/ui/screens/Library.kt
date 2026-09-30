@@ -255,7 +255,7 @@ fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
                 if (c.unavailable(t)) c.toast(if (c.settings.offline) "Offline mode is on · only downloaded songs play" else "Can't reach ${c.pcName} · only downloaded songs play until it's back")
                 else c.st.playFrom(c.app, list, t)
             },
-            onArtist = { c.st.openArtist(it) },
+            onArtist = { c.st.openArtist(c.lib.artistOf[t.id] ?: it) },
             onMore = { c.st.sheet = Sheet.Actions(t.id) },
             favorite = c.isFavorite(t.id),
         )
