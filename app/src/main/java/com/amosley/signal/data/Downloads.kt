@@ -56,6 +56,8 @@ class Downloads(
     private val _titles = MutableStateFlow<Map<String, String>>(emptyMap())
     val titles: StateFlow<Map<String, String>> = _titles
     var onQueueActive: (Boolean) -> Unit = {}
+    /** While true, no new download starts (a song is streaming from the PC and needs its bandwidth and disk). */
+    var holdWhile: () -> Boolean = { false }
 
     fun state(id: String): DlState = _states.value[id] ?: DlState.None
     fun fileFor(id: String): File? = (state(id) as? DlState.Done)?.file?.path?.let(::File)?.takeIf { it.exists() }
@@ -127,6 +129,7 @@ class Downloads(
             workers += scope.launch(Dispatchers.IO) {
                 try {
                     while (isActive) {
+                        while (holdWhile()) delay(3_000)
                         val next = synchronized(this@Downloads) { pending.removeFirstOrNull() } ?: break
                         runOne(next)
                     }

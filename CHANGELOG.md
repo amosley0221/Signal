@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.19] - 2026-09-30
+
+### No more freezes while streaming during a scan
+- **Signal Agent (PC):** while a song is streaming to your phone (or to Sonos), the library scan reads only 2 files at a time instead of up to 8, so the song gets the disk first. Full speed resumes when playback stops. This fixes songs freezing for several seconds while the PC was scanning several folders at once.
+- **App:** background downloads wait while a song is streaming from the PC, and continue when it stops or when you play something stored on the phone.
+
 ## [1.0.18] - 2026-09-30
 
 ### Artists with featured guests

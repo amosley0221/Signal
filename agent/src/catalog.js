@@ -23,6 +23,10 @@ const PUBLISH_EVERY = 400;
 const SCAN_PARALLEL = 3;
 // Minimum time between progress publishes during a scan.
 const PUBLISH_MIN_MS = 30_000;
+// Files read at once across all scanning libraries; fewer while the phone is streaming a song,
+// so playback isn't starved by the scan on the same disk.
+const IO_SLOTS = 8;
+const IO_SLOTS_STREAMING = 2;
 const META_TIMEOUT_MS = 30000;
 function withTimeout(promise, ms, message) {
   let t;
@@ -41,6 +45,9 @@ export class Catalog {
     this.log = log || (() => {});
     this.cacheFile = path.join(config.dataDir, 'catalog.json');
     this.lastPublishAt = 0;
+    this.activeStreams = 0;
+    this.ioBusy = 0;
+    this.ioWaiters = [];
     this.cache = { version: CACHE_VERSION, libs: {} };
     this.libraries = [];
     this.index = new Map();
@@ -160,6 +167,32 @@ export class Catalog {
   }
 
   /** Writes the cache. Calls made while a write is running are merged into one follow-up write. */
+  /** A song started/stopped streaming to the phone (scans slow down while any is playing). */
+  streamStarted() { this.activeStreams++; }
+  streamEnded() {
+    this.activeStreams = Math.max(0, this.activeStreams - 1);
+    this.#wakeIo();
+  }
+
+  #wakeIo() {
+    const w = this.ioWaiters;
+    this.ioWaiters = [];
+    for (const r of w) r();
+  }
+
+  async #withIoSlot(fn) {
+    while (this.ioBusy >= (this.activeStreams > 0 ? IO_SLOTS_STREAMING : IO_SLOTS)) {
+      await new Promise((r) => this.ioWaiters.push(r));
+    }
+    this.ioBusy++;
+    try {
+      return await fn();
+    } finally {
+      this.ioBusy--;
+      this.#wakeIo();
+    }
+  }
+
   async saveCache() {
     if (this.saving) {
       this.saveAgain = true;
@@ -250,7 +283,7 @@ export class Catalog {
       const role = this.roleFor(lib, f.kind);
       if (role) {
         const rel = toPosix(path.relative(root, f.abs));
-        const entry = await this.#processFile(lib, f, rel, role, prev[rel], listings.get(f.dir));
+        const entry = await this.#withIoSlot(() => this.#processFile(lib, f, rel, role, prev[rel], listings.get(f.dir)));
         if (entry) {
           next[rel] = entry;
           if (entry._parsed) { parsed++; delete entry._parsed; }

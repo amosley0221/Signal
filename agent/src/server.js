@@ -154,6 +154,11 @@ export function createServer(agent) {
   const streamHandler = (req, res, p) => {
     const it = agent.catalog.get(p.id);
     if (!it || it.type === 'show') return notFound(req, res);
+    // Tell the scanner a song is playing so it backs off the disk until the response ends.
+    if (req.method === 'GET' && agent.catalog.streamStarted) {
+      agent.catalog.streamStarted();
+      res.once('close', () => agent.catalog.streamEnded());
+    }
     return sendFile(req, res, it.abs);
   };
   route('GET', '/api/stream/:id', streamHandler);

@@ -89,6 +89,9 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     private var remoteJob: Job? = null
     private var controller: MediaController? = null
     var onToast: (String) -> Unit = {}
+    /** True while a song plays from the PC (on the phone, or on Sonos/Cast, which also pull it from the PC). Read from any thread. */
+    @Volatile var streamingFromPc = false
+        private set
 
     init {
         exo.addListener(object : Player.Listener {
@@ -106,6 +109,9 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         scope.launch {
             while (true) {
                 delay(500)
+                val r = remote
+                streamingFromPc = if (r != null) r.state.value.playing
+                else exo.isPlaying && exo.currentMediaItem?.localConfiguration?.uri?.scheme?.startsWith("http") == true
                 if (remote == null) {
                     _ui.update { it.copy(positionMs = exo.currentPosition.coerceAtLeast(0), durationMs = durationOf(exo)) }
                 }

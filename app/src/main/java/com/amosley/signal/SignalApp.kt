@@ -54,6 +54,7 @@ class SignalApp : Application(), ImageLoaderFactory {
         super.onCreate()
         repo = Repository(this, scope)
         hub = PlayerHub(this, repo, scope)
+        repo.downloads.holdWhile = { hub.streamingFromPc }
         hub.onToast = ::toast
         sonos = SonosController(this, repo.http, scope)
         cast = CastManager(this) { output ->
