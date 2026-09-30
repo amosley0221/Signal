@@ -370,6 +370,8 @@ class SonosOutput(
     private var expectedDuration = 0L
     /** When the current song was handed to the speaker (0 = not waiting for it to start). */
     private var loadedAt = 0L
+    /** Extra Play commands sent while waiting for the speaker to start (it ignores Play until it's ready). */
+    private var playRetries = 0
 
     private fun run(block: suspend () -> Unit) = scope.launch {
         runCatching { block() }.onFailure { onError("${room.name} couldn't play this song (${it.message ?: "error"})") }
@@ -386,8 +388,10 @@ class SonosOutput(
             sonos.setUri(room, item)
             loaded = true
             loadedAt = if (play) System.currentTimeMillis() else 0L
+            playRetries = 0
             if (startMs > 1000) runCatching { sonos.seek(room, startMs) }
-            if (play) sonos.play(room)
+            // A speaker still buffering may refuse this first Play; polling below re-sends it, so never give up here.
+            if (play) runCatching { sonos.play(room) }
             startPolling()
         }
     }
@@ -401,9 +405,17 @@ class SonosOutput(
                 val (pos, dur) = runCatching { sonos.position(room) }.getOrDefault(0L to 0L)
                 val playing = st == "PLAYING" || st == "TRANSITIONING"
                 // Only count real playback (TRANSITIONING also happens when the speaker fails to load the file).
-                if (st == "PLAYING" && pos > 0) sawPlaying = true
+                if (st == "PLAYING" && pos > 0) { sawPlaying = true; loadedAt = 0 }
                 val d = if (dur > 0) dur else expectedDuration
-                if (st == "STOPPED" && !sawPlaying && loadedAt > 0 && System.currentTimeMillis() - loadedAt > 10_000) {
+                val waiting = loadedAt > 0 && !sawPlaying && (st == "STOPPED" || st == "PAUSED_PLAYBACK")
+                val waited = System.currentTimeMillis() - loadedAt
+                if (waiting && playRetries < 4 && waited > (playRetries + 1) * 2_500L) {
+                    // Loaded but not started: the first Play arrived before the speaker was ready. Ask again.
+                    playRetries++
+                    runCatching { sonos.play(room) }
+                    continue
+                }
+                if (waiting && st == "STOPPED" && waited > 14_000) {
                     // Stopped without ever playing: the speaker couldn't fetch the song. Stop here instead of skipping through the queue.
                     loadedAt = 0
                     _state.value = RemoteState(positionMs = 0, durationMs = d, playing = false, error = "${room.name} couldn't load this song")
@@ -425,6 +437,7 @@ class SonosOutput(
 
     override fun pause() {
         if (!loaded) return
+        loadedAt = 0
         _state.value = _state.value.copy(playing = false)
         scope.launch { runCatching { sonos.pause(room) } }
     }
