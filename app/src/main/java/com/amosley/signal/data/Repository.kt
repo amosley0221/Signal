@@ -478,9 +478,12 @@ class Repository(val context: Context, val scope: CoroutineScope) {
             }
             pick.forEach { wanted += it.id; download(it, show, auto = true) }
             if (s.autoRemoveWatched) {
+                // Only episodes you finished in Signal after downloading them (not ones watched long ago in Plex,
+                // e.g. when downloading a whole series you've seen), a day after you watched them.
                 eps.filter { it.watched && downloads.isDownloaded(it.id) }.forEach { ep ->
-                    val at = meta.watchedAt[ep.id] ?: now.also { meta = meta.copy(watchedAt = meta.watchedAt + (ep.id to it)) }
-                    if (now - at > 24 * 3600_000L) downloads.remove(ep.id)
+                    val at = meta.watchedAt[ep.id] ?: return@forEach
+                    val downloadedAt = (downloads.state(ep.id) as? DlState.Done)?.file?.finishedAt ?: return@forEach
+                    if (at > downloadedAt && now - at > 24 * 3600_000L) downloads.remove(ep.id)
                 }
             }
         }

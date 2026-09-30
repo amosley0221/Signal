@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.32] - 2026-10-01
+
+### Download a whole season or series
+- A show's page now has **Download Season N** and **Download All N seasons** buttons under the season tabs. Each shows the number of episodes and how much space they need. Once started, the button shows how many are downloaded ("7 / 12 downloaded"), then a check mark when done. These replace the small unlabeled download icon next to Play.
+- **Remove watched episodes** now only removes episodes you finished in Signal after downloading them, a day after you watched them. Before, downloading a series you had already watched in Plex would have removed most of it again the next day.
+
 ## [1.0.31] - 2026-10-01
 
 ### Much faster TV and movie scans

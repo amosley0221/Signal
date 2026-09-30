@@ -269,13 +269,6 @@ fun ShowScreen(c: Ctx, id: String) {
                             c.st.push(Screen.Video(next.id, VideoKind.EPISODE, show.id))
                         }
                     }
-                    if (!show.id.startsWith("locs:")) {
-                    Spacer(Modifier.width(10.dp))
-                    SquareBtn(Icons.Filled.Download, size = 40.dp, desc = "Download season") {
-                        season?.episodes?.forEach { c.repo.download(it, show) }
-                        c.toast("Downloading season $seasonNo")
-                    }
-                    }
                 }
                 Spacer(Modifier.height(16.dp))
                 MetaRow(c, show.certificate, show.rating, show.matchedBy,
@@ -298,6 +291,16 @@ fun ShowScreen(c: Ctx, id: String) {
                                 .clickable { c.st.season = s.number }.padding(horizontal = 12.dp),
                             contentAlignment = Alignment.Center,
                         ) { Text(if (on) "Season ${s.number}" else "Season ${s.number} · ${s.episodes.size} ep", style = T.ui(13.sp, 600), color = if (on) C.Bg else C.Fg) }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (!show.id.startsWith("locs:")) {
+                    // Download a whole season or the whole series at once (episodes on the PC only).
+                    val seasonEps = season?.episodes.orEmpty().filter { it.uri.isEmpty() }
+                    val allEps = show.seasons.flatMap { it.episodes }.filter { it.uri.isEmpty() }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (seasonEps.isNotEmpty()) DownloadGroupBtn(c, "Season $seasonNo", seasonEps) { seasonEps.forEach { c.repo.download(it, show) } }
+                        if (show.seasons.size > 1 && allEps.isNotEmpty()) DownloadGroupBtn(c, "All ${show.seasons.size} seasons", allEps) { allEps.forEach { c.repo.download(it, show) } }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -707,5 +710,22 @@ private fun VideoOverlay(
                 OverlayIcon(if (full) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, if (full) "Exit full screen" else "Full screen", onClick = onFull)
             }
         }
+    }
+}
+
+/** "Download Season 2 · 12 ep · 18.4 GB", or progress ("7 / 12 downloaded") once started. */
+@Composable
+private fun DownloadGroupBtn(c: Ctx, label: String, eps: List<Episode>, onDownload: () -> Unit) {
+    val done = eps.count { c.dlState(it.id) is DlState.Done }
+    val active = eps.count { val s = c.dlState(it.id); s is DlState.Queued || s is DlState.Running }
+    val text = when {
+        done == eps.size -> "$label · downloaded ✓"
+        active > 0 || done > 0 -> "$label · $done / ${eps.size} downloaded"
+        else -> "Download $label · ${eps.size} ep · ${Fmt.bytes(eps.sumOf { it.size })}"
+    }
+    OutlineBtn(text, icon = if (done == eps.size) null else Icons.Filled.Download, color = C.AmberText, border = C.Amber) {
+        if (done == eps.size) return@OutlineBtn
+        onDownload()
+        c.toast("Downloading ${eps.size - done} episode${if (eps.size - done != 1) "s" else ""} · $label")
     }
 }
