@@ -32,9 +32,9 @@ class SignalApp : Application(), ImageLoaderFactory {
         private set
     lateinit var cast: CastManager
         private set
-    lateinit var sonos: SonosController
     /** A movie/episode is streaming from the PC right now (background downloads wait). Read from any thread. */
     @Volatile var videoStreaming = false
+    lateinit var sonos: SonosController
         private set
     private val _toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val toasts: SharedFlow<String> = _toasts
