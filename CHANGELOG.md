@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.35] - 2026-10-01
+
+### Plex-style Movies and TV Shows
+- **Movies** and **TV Shows** now have tabs, like Music:
+  - **Recommended:** rows of picks. Movies: Continue watching, Recently released, Recently added and your top genres. TV Shows: Continue watching, Up next, Recently added, Start watching (shows you haven't begun) and your top genres. Genre rows have **See all ›**.
+  - **Browse:** every title in a grid, with sorting and the A–Z / scrub strip.
+  - **Categories:** pick a genre to see everything in it.
+- **Unfolded:** the Music / Movies / TV Shows bar is gone. Tap the big section title ("Movies ▾") to switch sections.
+
 ## [1.0.34] - 2026-10-01
 
 - The "songs have no artist" card has moved from the top of **Songs** to **Settings → Music**, with the same **Fix** button. The **Needs an artist** smart playlist is still under Playlists.

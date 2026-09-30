@@ -16,6 +16,9 @@ enum class MusicTab(val label: String) {
 
 enum class VideoKind { MOVIE, EPISODE, MUSIC_VIDEO }
 
+/** Tabs of Movies and TV Shows, like Plex: rows of picks, the full grid, or by genre. */
+enum class VideoTab(val label: String) { RECOMMENDED("Recommended"), BROWSE("Browse"), CATEGORIES("Categories") }
+
 sealed interface Screen {
     data object Library : Screen
     data class Album(val key: String) : Screen
@@ -60,6 +63,11 @@ sealed interface Sheet {
 class AppState : ViewModel() {
     var section by mutableStateOf(Section.MUSIC)
     var tab by mutableStateOf(MusicTab.RECENT)
+    var movieTab by mutableStateOf(VideoTab.RECOMMENDED)
+    var tvTab by mutableStateOf(VideoTab.RECOMMENDED)
+    /** Genre picked under Categories (null = show the list of genres). */
+    var movieGenre by mutableStateOf<String?>(null)
+    var tvGenre by mutableStateOf<String?>(null)
     val stack = mutableStateListOf<Screen>(Screen.Library)
     var sheet by mutableStateOf<Sheet?>(null)
     var showLyrics by mutableStateOf(false)

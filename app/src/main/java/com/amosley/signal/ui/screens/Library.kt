@@ -71,6 +71,13 @@ import com.amosley.signal.ui.Ctx
 import com.amosley.signal.ui.MusicTab
 import com.amosley.signal.ui.Screen
 import com.amosley.signal.ui.Section
+import com.amosley.signal.ui.VideoTab
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import com.amosley.signal.ui.Sheet
 import com.amosley.signal.ui.VideoKind
 import com.amosley.signal.ui.components.Art
@@ -130,7 +137,9 @@ fun LibraryPane(c: Ctx) {
             counted(jump) {
                 Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
                     Row(verticalAlignment = Alignment.Top) {
-                        Text(section.label, style = T.sectionTitle, color = C.Fg, modifier = Modifier.weight(1f))
+                        Box(Modifier.weight(1f)) {
+                            if (c.unfolded) SectionPicker(c, section) else Text(section.label, style = T.sectionTitle, color = C.Fg)
+                        }
                         val newCount = importCandidates(c).size
                         if (newCount > 0 && section == Section.MUSIC) {
                             OutlineBtn("+$newCount new", color = C.AmberText, border = C.Amber) { st.sheet = Sheet.Import }
@@ -148,18 +157,6 @@ fun LibraryPane(c: Ctx) {
                     Spacer(Modifier.height(8.dp))
                     StatusLine(c)
                 }
-                    if (c.unfolded) {
-                        Spacer(Modifier.height(14.dp))
-                        Row(Modifier.fillMaxWidth().border(1.dp, C.HairStrong)) {
-                            listOf(Section.MUSIC, Section.MOVIES, Section.TV).forEach { s ->
-                                val on = section == s
-                                Box(
-                                    Modifier.weight(1f).height(32.dp).background(if (on) C.Fg else Color.Transparent).clickable { st.goSection(s) },
-                                    contentAlignment = Alignment.Center,
-                                ) { Mono(s.label, color = if (on) C.Bg else C.Muted, style = T.mono(10.5.sp, 600)) }
-                            }
-                        }
-                    }
                 }
             }
             when (section) {
@@ -174,8 +171,30 @@ fun LibraryPane(c: Ctx) {
                         MusicTab.VIDEOS -> musicVideos(c)
                     }
                 }
-                Section.MOVIES -> movies(c, jump)
-                Section.TV -> shows(c, jump)
+                Section.MOVIES -> {
+                    counted(jump) { TabRow(VideoTab.entries.map { it.label }, st.movieTab.ordinal) { st.movieTab = VideoTab.entries[it] } }
+                    when (st.movieTab) {
+                        VideoTab.RECOMMENDED -> moviesHome(c)
+                        VideoTab.BROWSE -> movies(c, jump, c.lib.movies, "All movies")
+                        VideoTab.CATEGORIES -> {
+                            val genres = genreCounts(c.lib.movies.map { it.genres })
+                            counted(jump) { GenrePicker(genres, st.movieGenre) { st.movieGenre = it } }
+                            st.movieGenre?.let { g -> movies(c, jump, c.lib.movies.filter { g in it.genres }, g) }
+                        }
+                    }
+                }
+                Section.TV -> {
+                    counted(jump) { TabRow(VideoTab.entries.map { it.label }, st.tvTab.ordinal) { st.tvTab = VideoTab.entries[it] } }
+                    when (st.tvTab) {
+                        VideoTab.RECOMMENDED -> showsHome(c)
+                        VideoTab.BROWSE -> shows(c, jump, c.lib.shows, "All shows")
+                        VideoTab.CATEGORIES -> {
+                            val genres = genreCounts(c.lib.shows.map { it.genres })
+                            counted(jump) { GenrePicker(genres, st.tvGenre) { st.tvGenre = it } }
+                            st.tvGenre?.let { g -> shows(c, jump, c.lib.shows.filter { g in it.genres }, g) }
+                        }
+                    }
+                }
                 Section.SETTINGS -> Unit
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -199,8 +218,17 @@ private fun railMode(c: Ctx, section: Section): RailMode? {
             MusicTab.ARTISTS -> mode(SortTab.ARTISTS, c.lib.artists.size, 30)
             else -> null
         }
-        Section.MOVIES -> mode(SortTab.MOVIES, c.lib.movies.size, 30)
-        Section.TV -> mode(SortTab.SHOWS, c.lib.shows.size, 30)
+        // Only the grids have a strip (not the Recommended rows or the list of genres).
+        Section.MOVIES -> when (c.st.movieTab) {
+            VideoTab.BROWSE -> mode(SortTab.MOVIES, c.lib.movies.size, 30)
+            VideoTab.CATEGORIES -> c.st.movieGenre?.let { g -> mode(SortTab.MOVIES, c.lib.movies.count { g in it.genres }, 30) }
+            VideoTab.RECOMMENDED -> null
+        }
+        Section.TV -> when (c.st.tvTab) {
+            VideoTab.BROWSE -> mode(SortTab.SHOWS, c.lib.shows.size, 30)
+            VideoTab.CATEGORIES -> c.st.tvGenre?.let { g -> mode(SortTab.SHOWS, c.lib.shows.count { g in it.genres }, 30) }
+            VideoTab.RECOMMENDED -> null
+        }
         Section.SETTINGS -> null
     }
 }
@@ -224,19 +252,69 @@ private fun LazyListScope.counted(j: JumpIndex, content: @Composable LazyItemSco
 }
 
 @Composable
-private fun SubTabs(c: Ctx) {
+private fun SubTabs(c: Ctx) = TabRow(MusicTab.entries.map { it.label }, c.st.tab.ordinal) { c.st.tab = MusicTab.entries[it] }
+
+/** Underlined text tabs (Music: Recently Added, Songs…; Movies/TV: Recommended, Browse, Categories). */
+@Composable
+private fun TabRow(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 16.dp)
             .drawBehind { drawRect(C.Hair, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) },
         horizontalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        MusicTab.entries.forEach { t ->
-            val on = c.st.tab == t
+        labels.forEachIndexed { i, label ->
+            val on = i == selected
             Box(
-                Modifier.clickable { c.st.tab = t }.padding(bottom = 10.dp)
+                Modifier.clickable { onSelect(i) }.padding(bottom = 10.dp)
                     .drawBehind { if (on) drawRect(C.Amber, Offset(0f, size.height + 8.dp.toPx()), Size(size.width, 2.dp.toPx())) },
-            ) { Text(t.label, style = T.ui(14.sp, if (on) 600 else 500), color = if (on) C.Fg else C.Muted) }
+            ) { Text(label, style = T.ui(14.sp, if (on) 600 else 500), color = if (on) C.Fg else C.Muted) }
         }
+    }
+}
+
+/** Unfolded: the big section title is a menu (Music / Movies / TV Shows) instead of a separate bar. */
+@Composable
+private fun SectionPicker(c: Ctx, section: Section) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(Modifier.clickable { open = true }, verticalAlignment = Alignment.CenterVertically) {
+            Text(section.label, style = T.sectionTitle, color = C.Fg)
+            Spacer(Modifier.width(6.dp))
+            Icon(Icons.Filled.KeyboardArrowDown, "Change section", tint = C.Muted, modifier = Modifier.size(30.dp))
+        }
+        DropdownMenu(open, onDismissRequest = { open = false }, containerColor = C.Surface) {
+            listOf(Section.MUSIC, Section.MOVIES, Section.TV).forEach { s ->
+                DropdownMenuItem(
+                    text = { Text(s.label, style = T.ui(16.sp, if (s == section) 700 else 500), color = if (s == section) C.AmberText else C.Fg) },
+                    onClick = { open = false; c.st.goSection(s) },
+                )
+            }
+        }
+    }
+}
+
+/** Genre → number of titles, most common first. */
+private fun genreCounts(genres: List<List<String>>): List<Pair<String, Int>> =
+    genres.flatten().filter { it.isNotBlank() }.groupingBy { it }.eachCount().toList().sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun GenrePicker(genres: List<Pair<String, Int>>, selected: String?, onPick: (String?) -> Unit) {
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
+        if (genres.isEmpty()) {
+            Mono("No genres yet · they come from Plex or online details", color = C.Faint)
+            return@Column
+        }
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            genres.forEach { (g, n) ->
+                val on = g == selected
+                Box(
+                    Modifier.background(if (on) C.Amber else Color.Transparent).border(1.dp, if (on) C.Amber else C.HairStrong)
+                        .clickable { onPick(if (on) null else g) }.padding(horizontal = 12.dp, vertical = 7.dp),
+                ) { Text("$g · $n", style = T.ui(13.sp, 600), color = if (on) C.OnAmber else C.Fg) }
+            }
+        }
+        if (selected == null) Mono("Pick a genre", color = C.Faint, modifier = Modifier.padding(top = 12.dp))
     }
 }
 
@@ -515,13 +593,50 @@ private fun LazyListScope.posterGrid(c: Ctx, cols: Int, count: Int, key: (Int) -
     }
 }
 
-private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
-    val list: List<Movie> = Sorting.movies(c.lib.movies, sortPref(c, SortTab.MOVIES))
-    val cont = Watching.continueWatching(c.lib.movies, emptyList(), c.lib.plexContinue, mine = c.lib.watchedInSignal)
-    if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
-    val recent = Watching.recentMovies(c.lib.movies)
-    if (recent.isNotEmpty() && list.size > 6) counted(jump) { RecentMoviesRow(c, recent) }
-    counted(jump) { SectionLabel("All movies", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+/** Movies › Recommended: Plex-style rows. */
+private fun LazyListScope.moviesHome(c: Ctx) {
+    val all = c.lib.movies
+    if (all.isEmpty()) { item { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }; return }
+    val cont = Watching.continueWatching(all, emptyList(), c.lib.plexContinue, mine = c.lib.watchedInSignal)
+    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    val released = all.filter { it.year != null }.sortedWith(compareByDescending<Movie> { it.year }.thenByDescending { it.addedAt }).take(20)
+    if (released.isNotEmpty()) item { MovieRow(c, "Recently released", released) }
+    val recent = Watching.recentMovies(all)
+    if (recent.isNotEmpty()) item { MovieRow(c, "Recently added", recent) }
+    val unwatched = all.filter { !it.watched && it.viewOffsetMs == 0L }.sortedByDescending { it.addedAt }
+    genreCounts(all.map { it.genres }).take(5).forEach { (g, _) ->
+        val inGenre = unwatched.filter { g in it.genres }.take(20)
+        if (inGenre.size >= 3) item(key = "mg-$g") {
+            MovieRow(c, g, inGenre) { c.st.movieTab = VideoTab.CATEGORIES; c.st.movieGenre = g }
+        }
+    }
+}
+
+/** TV Shows › Recommended: Plex-style rows. */
+private fun LazyListScope.showsHome(c: Ctx) {
+    val all = c.lib.shows
+    if (all.isEmpty()) { item { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }; return }
+    val cont = Watching.continueWatching(emptyList(), all, c.lib.plexContinue, mine = c.lib.watchedInSignal)
+    if (cont.isNotEmpty()) item { WatchRow(c, "Continue watching", cont) }
+    val next = Watching.upNext(all, c.lib.plexContinue, mine = c.lib.watchedInSignal)
+    if (next.isNotEmpty()) item { WatchRow(c, "Up next", next) }
+    val recent = Watching.recentEpisodes(all)
+    if (recent.isNotEmpty()) item { WatchRow(c, "Recently added", recent, recentStyle = true) }
+    // Shows you haven't started (nothing watched in Signal or Plex), newest first.
+    val start = all.filter { sh -> sh.seasons.all { se -> se.episodes.all { !it.watched && it.viewOffsetMs == 0L && it.id !in c.lib.watchedInSignal } } }
+        .sortedByDescending { it.addedAt }.take(20)
+    if (start.isNotEmpty()) item { ShowRow(c, "Start watching", start) }
+    genreCounts(all.map { it.genres }).take(5).forEach { (g, _) ->
+        val inGenre = all.filter { g in it.genres }.sortedByDescending { it.addedAt }.take(20)
+        if (inGenre.size >= 3) item(key = "sg-$g") {
+            ShowRow(c, g, inGenre) { c.st.tvTab = VideoTab.CATEGORIES; c.st.tvGenre = g }
+        }
+    }
+}
+
+private fun LazyListScope.movies(c: Ctx, jump: JumpIndex, source: List<Movie>, label: String) {
+    val list: List<Movie> = Sorting.movies(source, sortPref(c, SortTab.MOVIES))
+    counted(jump) { SectionLabel(label, Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
     counted(jump) { SortBar(c, SortTab.MOVIES) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No movies yet", color = C.Faint) } }
     val mpref = sortPref(c, SortTab.MOVIES)
@@ -542,15 +657,9 @@ private fun LazyListScope.movies(c: Ctx, jump: JumpIndex) {
     }
 }
 
-private fun LazyListScope.shows(c: Ctx, jump: JumpIndex) {
-    val list: List<Show> = Sorting.shows(c.lib.shows, sortPref(c, SortTab.SHOWS))
-    val cont = Watching.continueWatching(emptyList(), c.lib.shows, c.lib.plexContinue, mine = c.lib.watchedInSignal)
-    if (cont.isNotEmpty()) counted(jump) { WatchRow(c, "Continue watching", cont) }
-    val next = Watching.upNext(c.lib.shows, c.lib.plexContinue, mine = c.lib.watchedInSignal)
-    if (next.isNotEmpty()) counted(jump) { WatchRow(c, "Up next", next) }
-    val recent = Watching.recentEpisodes(c.lib.shows)
-    if (recent.isNotEmpty()) counted(jump) { WatchRow(c, "Recently added", recent, recentStyle = true) }
-    counted(jump) { SectionLabel("All shows", Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
+private fun LazyListScope.shows(c: Ctx, jump: JumpIndex, source: List<Show>, label: String) {
+    val list: List<Show> = Sorting.shows(source, sortPref(c, SortTab.SHOWS))
+    counted(jump) { SectionLabel(label, Modifier.padding(horizontal = 20.dp), trailing = "${list.size}") }
     counted(jump) { SortBar(c, SortTab.SHOWS) }
     if (list.isEmpty()) counted(jump) { Box(Modifier.padding(20.dp)) { Mono("No TV shows yet", color = C.Faint) } }
     val spref = sortPref(c, SortTab.SHOWS)
@@ -624,12 +733,39 @@ private fun WatchCard(c: Ctx, w: WatchItem, recentStyle: Boolean) {
 }
 
 @Composable
-private fun RecentMoviesRow(c: Ctx, movies: List<Movie>) {
+private fun RowTitle(title: String, onSeeAll: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Mono(title, color = C.Muted, modifier = Modifier.weight(1f))
+        if (onSeeAll != null) Mono("See all ›", color = C.AmberText, modifier = Modifier.clickable(onClick = onSeeAll))
+    }
+}
+
+@Composable
+private fun ShowRow(c: Ctx, title: String, shows: List<Show>, onSeeAll: (() -> Unit)? = null) {
+    val w = if (c.unfolded) 150.dp else 112.dp
     Column(Modifier.padding(top = 14.dp)) {
-        Mono("Recently added", color = C.Muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
+        RowTitle(title, onSeeAll)
         LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(movies, key = { "rm-${it.id}" }) { mv ->
-                Column(Modifier.width(112.dp).clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
+            items(shows, key = { "$title-${it.id}" }) { sh ->
+                Column(Modifier.width(w).clickable { c.st.season = null; c.st.push(Screen.ShowPage(sh.id)) }) {
+                    Art(sh.title, sh.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                    Spacer(Modifier.height(6.dp))
+                    Text(sh.title, style = T.ui(12.5.sp, 600), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${sh.seasons.size} season${if (sh.seasons.size != 1) "s" else ""}", style = T.ui(11.5.sp), color = C.Muted, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MovieRow(c: Ctx, title: String, movies: List<Movie>, onSeeAll: (() -> Unit)? = null) {
+    val w = if (c.unfolded) 150.dp else 112.dp
+    Column(Modifier.padding(top = 14.dp)) {
+        RowTitle(title, onSeeAll)
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(movies, key = { "$title-${it.id}" }) { mv ->
+                Column(Modifier.width(w).clickable { c.st.push(Screen.MoviePage(mv.id)) }) {
                     Art(mv.title, mv.posterUrl?.let { c.repo.remoteUrl(it) }, Modifier.fillMaxWidth().aspectRatio(2f / 3f)) {
                         PosterBadge(c, mv.id, mv.origin, Modifier.align(Alignment.TopEnd).padding(5.dp))
                     }
