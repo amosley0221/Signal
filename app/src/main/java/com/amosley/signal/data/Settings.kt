@@ -45,6 +45,8 @@ data class Settings(
     val phoneFolders: Map<String, PhoneFolderType> = emptyMap(),
     /** False until the user has chosen phone folders (the library prompts them to). */
     val phoneFoldersChosen: Boolean = false,
+    /** Look lyrics up on LRCLIB when a song has no .lrc file. */
+    val onlineLyrics: Boolean = true,
 )
 
 enum class PhoneFolderType(val label: String) {

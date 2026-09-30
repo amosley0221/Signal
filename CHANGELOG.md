@@ -9,6 +9,12 @@ The GitHub release notes for each APK come from the matching section below.
 - The bottom **Sync** tab is now **Settings**. PC sync is the first item in Settings, and your phone folders are listed right below it.
   On the unfolded screen, open Settings with the gear next to search.
 
+### Lyrics without .lrc files
+- Songs without a `.lrc` file now get lyrics automatically from **LRCLIB**, a free online lyrics library with time-synced lyrics for millions of songs.
+  The app matches by title, artist and song length. Lyrics are saved on the phone, so they work offline afterwards.
+- Lyrics that aren't time-synced still show, with a "Not time-synced" note.
+- Turn this off in **Settings → Lyrics** if you prefer. Songs with no artist aren't looked up, to avoid wrong matches, so add an artist first. Giving a song an artist makes Signal look again.
+
 ### Choose which phone folders to use
 - In **Settings**, set each folder on your phone to Music, Music Videos, Movies or TV Shows. You can also get there from the prompt in your library.
   Set each folder to Music, Music Videos, Movies or TV Shows. Folders you leave Off stay hidden, so ringtones,

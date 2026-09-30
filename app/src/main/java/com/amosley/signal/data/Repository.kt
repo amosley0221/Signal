@@ -357,25 +357,50 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     fun cachedLyrics(id: String): Lyrics? = _lyrics.value[id]
 
+    private val onlineLyrics = OnlineLyrics(http)
+    /** Songs LRCLIB had nothing for, so we don't ask again every time they play (per app run). */
+    private val onlineMisses = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * Lyrics, in order: .lrc next to a phone song / the PC agent (.lrc or embedded tag) → cached copy →
+     * LRCLIB online lookup by artist + title + duration. Results are cached on the phone for offline use.
+     */
     suspend fun lyrics(track: Track): Lyrics? = withContext(Dispatchers.IO) {
         _lyrics.value[track.id]?.let { return@withContext it }
         val file = File(lyricsDir, safe(track.id) + ".json")
-        val result: Lyrics? = if (track.origin == Origin.PHONE) {
+        val primary: Lyrics? = if (track.origin == Origin.PHONE) {
             localLrc(track)
         } else {
             val p = pc
             val b = _status.value.baseUrl
-            val fromPc = if (p != null && b != null && !_settings.value.offline) runCatching {
+            if (p != null && b != null && !_settings.value.offline) runCatching {
                 val api = agent.lyrics(b, p.token, track.id)
                 Lyrics(api.lang, Lrc.merge(api.lines, api.translation.orEmpty()), api.synced, "pc")
             }.getOrNull() else null
-            fromPc ?: runCatching { SignalJson.decodeFromString(Lyrics.serializer(), file.readText()) }.getOrNull()
-        }
+        }?.takeIf { it.lines.isNotEmpty() }
+        val result = primary
+            ?: runCatching { SignalJson.decodeFromString(Lyrics.serializer(), file.readText()) }.getOrNull()
+            ?: fetchOnline(track)
         if (result != null) {
             _lyrics.update { it + (track.id to result) }
-            if (track.origin == Origin.PC) runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), result)) }
+            if (result !== primary || track.origin == Origin.PC) runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), result)) }
         }
         result
+    }
+
+    private suspend fun fetchOnline(track: Track): Lyrics? {
+        val s = _settings.value
+        if (!s.onlineLyrics || s.offline || track.artist.isNullOrBlank() || track.id in onlineMisses) return null
+        val found = runCatching { onlineLyrics.find(track) }.getOrNull()
+        if (found == null) onlineMisses += track.id
+        return found
+    }
+
+    /** Forget cached lyrics for a song and look again (e.g. after fixing its artist tag). */
+    fun refreshLyrics(track: Track) {
+        _lyrics.update { it - track.id }
+        onlineMisses -= track.id
+        File(lyricsDir, safe(track.id) + ".json").delete()
     }
 
     private fun localLrc(track: Track): Lyrics? {
@@ -392,6 +417,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     // ---- Artist tags ----------------------------------------------------------------------------
 
     fun setArtist(track: Track, artist: String) {
+        onlineMisses -= track.id
         _overrides.update { it + (track.id to artist) }
         overridesStore.save(_overrides.value)
         if (track.origin == Origin.PC) {

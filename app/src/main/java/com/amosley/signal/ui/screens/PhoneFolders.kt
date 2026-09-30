@@ -38,6 +38,8 @@ import com.amosley.signal.ui.Screen
 import com.amosley.signal.ui.components.Hairline
 import com.amosley.signal.ui.components.Mono
 import com.amosley.signal.ui.components.OutlineBtn
+import com.amosley.signal.ui.components.SettingRow
+import com.amosley.signal.ui.components.Toggle
 import com.amosley.signal.ui.theme.C
 import com.amosley.signal.ui.theme.T
 
@@ -110,6 +112,12 @@ fun SettingsScreen(c: Ctx) {
                     Icon(Icons.Filled.ChevronRight, null, tint = C.Faint)
                 }
                 Spacer(Modifier.height(22.dp))
+                Mono("Lyrics", color = C.Muted)
+                SettingRow(
+                    "Find lyrics online",
+                    "When a song has no .lrc file, look up time-synced lyrics on LRCLIB (free, no account). Uses the song's title, artist and length.",
+                ) { Toggle(c.settings.onlineLyrics) { v -> c.repo.updateSettings { it.copy(onlineLyrics = v) } } }
+                Spacer(Modifier.height(16.dp))
                 Mono("Folders on this phone", color = C.Muted)
                 Spacer(Modifier.height(6.dp))
                 Text(

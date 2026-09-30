@@ -274,16 +274,17 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
     if (lyrics == null || lyrics.lines.isEmpty()) {
         val msg = when {
             lyrics == null && t.origin == Origin.PC && !c.status.reachable -> "Lyrics load when ${c.pcName} is reachable"
-            t.genres.any { it.equals("instrumental", true) } -> "Instrumental · no lyrics"
-            t.origin == Origin.PC -> "No .lrc found on ${c.pcName} · Suno lyrics will sync on next scan"
-            else -> "No lyrics · put a .lrc file next to the song"
+            lyrics?.source == "lrclib-instrumental" || t.genres.any { it.equals("instrumental", true) } -> "Instrumental · no lyrics"
+            t.artist == null -> "No lyrics · add an artist so Signal can look them up online"
+            !c.settings.onlineLyrics -> "No lyrics found · online lookup is off in Settings"
+            else -> "No lyrics found for this song"
         }
         Box(Modifier.fillMaxSize().alpha(0.45f), contentAlignment = Alignment.Center) { Mono(msg, color = C.Fg, maxLines = 3) }
         return
     }
     val mode = c.settings.lyricMode
     val foreign = lyrics.hasTranslation && lyrics.lang != null && lyrics.lang != "en"
-    val active = Lrc.activeIndex(lyrics.lines, c.player.positionMs / 1000.0)
+    val active = if (lyrics.synced) Lrc.activeIndex(lyrics.lines, c.player.positionMs / 1000.0) else -1
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     Column(Modifier.fillMaxSize()) {
@@ -303,6 +304,15 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
             }
             Spacer(Modifier.height(8.dp))
         }
+        if (lyrics.source == "lrclib" || !lyrics.synced) {
+            Row {
+                Mono(
+                    listOfNotNull(if (lyrics.source == "lrclib") "Lyrics from LRCLIB" else null, if (!lyrics.synced) "Not time-synced" else null).joinToString(" · "),
+                    style = T.metaMono, color = C.Faint,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val h = maxHeight
             LaunchedEffect(active, h) {
@@ -314,6 +324,7 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
             LazyColumn(state = listState, contentPadding = PaddingValues(top = h * 0.38f, bottom = h * 0.6f), modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(lyrics.lines, key = { i, _ -> "ly-$i" }) { i, line ->
                     val target = when {
+                        !lyrics.synced -> 0.9f
                         i == active -> 1f
                         i < active -> 0.28f
                         else -> 0.42f
@@ -322,7 +333,7 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
                     val showOrig = !foreign || mode != LyricMode.TRANS
                     val showTr = foreign && mode != LyricMode.ORIG && line.tr != null
                     Column(
-                        Modifier.fillMaxWidth().alpha(a).clickable {
+                        Modifier.fillMaxWidth().alpha(a).clickable(enabled = lyrics.synced) {
                             c.hub.seekTo((line.t * 1000).toLong())
                             if (!c.player.playing) c.hub.toggle()
                         }.padding(vertical = 11.dp),

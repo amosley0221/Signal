@@ -37,3 +37,24 @@ class PhoneLibraryTest {
         assertEquals("Pilot", ballast.seasons.single().episodes.first().title)
     }
 }
+
+class OnlineLyricsTest {
+    private fun rec(dur: Double, synced: String? = null, plain: String? = null, instrumental: Boolean = false) =
+        com.amosley.signal.data.LrclibRecord(duration = dur, syncedLyrics = synced, plainLyrics = plain, instrumental = instrumental)
+
+    @Test fun picksClosestSyncedWithinTolerance() {
+        val r = com.amosley.signal.data.OnlineLyrics.pick(
+            listOf(rec(200.0, plain = "a"), rec(119.0, synced = "[00:01.00]x"), rec(300.0, synced = "[00:01.00]far")), 120.0,
+        )
+        assertEquals("[00:01.00]x", r?.syncedLyrics)
+    }
+
+    @Test fun convertsSyncedPlainAndInstrumental() {
+        val synced = com.amosley.signal.data.OnlineLyrics.toLyrics(rec(1.0, synced = "[00:02.50]Hello\n[00:05.00]World"))!!
+        assertEquals(true, synced.synced)
+        assertEquals(2.5, synced.lines.first().t, 0.0)
+        val plain = com.amosley.signal.data.OnlineLyrics.toLyrics(rec(1.0, plain = "one\ntwo"))!!
+        assertEquals(false, plain.synced)
+        assertEquals("lrclib-instrumental", com.amosley.signal.data.OnlineLyrics.toLyrics(rec(1.0, instrumental = true))!!.source)
+    }
+}
