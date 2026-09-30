@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.36] - 2026-10-01
+
+- **Music › Recently Added** now shows large album covers, like the Albums tab, instead of a song-by-song list. Each album appears once, newest first, under "Added this week" and "Earlier". Songs without an album get their own tile marked **Single**; tap it to play. This works folded and unfolded, with more tiles per row on the wider screen.
+
 ## [1.0.35] - 2026-10-01
 
 ### Plex-style Movies and TV Shows

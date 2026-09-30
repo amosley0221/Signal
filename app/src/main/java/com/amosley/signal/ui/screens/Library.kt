@@ -401,15 +401,55 @@ private fun LazyListScope.recent(c: Ctx, albumCols: Int) {
         item { EmptyLibrary(c) }
         return
     }
+    // Albums (and songs with no album, as "Single" tiles), newest first, like the Albums tab.
     val weekAgo = System.currentTimeMillis() - 7 * 24 * 3600_000L
-    val recent = c.lib.tracks.sortedByDescending { it.addedAt }
-    val thisWeek = recent.filter { it.addedAt > weekAgo }
-    item { SectionLabel(if (thisWeek.isNotEmpty()) "Added this week" else "Recently added", Modifier.padding(horizontal = 20.dp)) }
-    songRows(c, (thisWeek.ifEmpty { recent }).take(if (thisWeek.isEmpty()) 12 else 50), "recent")
-    val recentAlbums = c.lib.albums.filter { it.title != "Singles" }.sortedByDescending { a -> a.tracks.maxOf { it.addedAt } }.take(albumCols * 3)
-    if (recentAlbums.isNotEmpty()) {
-        item { SectionLabel("Recent albums", Modifier.padding(horizontal = 20.dp)) }
-        albumGrid(c, recentAlbums, "recent-albums", albumCols)
+    val tiles = (c.lib.albums.filter { it.title != "Singles" && it.tracks.isNotEmpty() }.map { RecentTile(it, null, it.tracks.maxOf { t -> t.addedAt }) } +
+        c.lib.albums.filter { it.title == "Singles" }.flatMap { a -> a.tracks.map { RecentTile(null, it, it.addedAt) } })
+        .sortedByDescending { it.at }.take(albumCols * 20)
+    val (week, earlier) = tiles.partition { it.at > weekAgo }
+    if (week.isNotEmpty()) {
+        item { SectionLabel("Added this week", Modifier.padding(horizontal = 20.dp)) }
+        recentGrid(c, week, "rw", albumCols)
+    }
+    if (earlier.isNotEmpty()) {
+        item { SectionLabel(if (week.isEmpty()) "Recently added" else "Earlier", Modifier.padding(horizontal = 20.dp)) }
+        recentGrid(c, earlier, "re", albumCols)
+    }
+}
+
+/** One Recently Added tile: an album, or a song with no album. */
+private data class RecentTile(val album: Album?, val track: Track?, val at: Long) {
+    val key: String get() = album?.key ?: "t-${track!!.id}"
+}
+
+private fun LazyListScope.recentGrid(c: Ctx, tiles: List<RecentTile>, key: String, cols: Int) {
+    items(tiles.chunked(cols), key = { row -> "$key-${row.first().key}" }) { row ->
+        Row(Modifier.padding(horizontal = 20.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            row.forEach { tile ->
+                val a = tile.album
+                val t = tile.track
+                if (a != null) {
+                    Column(Modifier.weight(1f).clickable { c.st.push(Screen.Album(a.key)) }) {
+                        Art(a.key, c.albumArt(a), Modifier.fillMaxWidth().aspectRatio(1f))
+                        Spacer(Modifier.height(8.dp))
+                        Text(a.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(a.artist ?: "Unknown artist", style = T.meta, color = if (a.artist == null) C.AmberText else C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                } else if (t != null) {
+                    Column(Modifier.weight(1f).clickable { c.st.playFrom(c.app, listOf(t), t) }) {
+                        Art(t.albumKey, c.art(t), Modifier.fillMaxWidth().aspectRatio(1f)) {
+                            Box(Modifier.align(Alignment.TopStart).padding(6.dp).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                                Text("SINGLE", style = T.badge, color = C.Fg)
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(t.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(t.artist ?: "Unknown artist", style = T.meta, color = if (t.artist == null) C.AmberText else C.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+        }
     }
 }
 
