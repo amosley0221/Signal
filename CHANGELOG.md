@@ -3,6 +3,15 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.1] - 2026-09-30
+
+### Easier PC setup
+- The PC side is now a single download: get `SignalAgent.exe` from this release and double-click it. You don't need Node.js or a command line anymore.
+- Setup happens in your browser. Pick your music, music video, movie and TV folders with a folder browser, and optionally add Plex.
+- A "Start with Windows" switch keeps the agent running in the background after you restart.
+- The setup page shows your PC's addresses, so you can type one into the phone if it isn't found automatically.
+- The phone's Sync screen now points to the new download.
+
 ## [1.0.0] - 2026-09-29
 
 First release of Signal Player: a music, movie and TV player for your phone that syncs with your PC.

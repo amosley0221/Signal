@@ -12,6 +12,9 @@ printf '%s\n' "$notes"
 cat <<'FOOTER'
 
 ---
-**Install / update:** download the APK below on your phone and open it. Updates install over the
-previous version — no need to uninstall (your library, downloads and settings are kept).
+**Phone:** download `Signal-*.apk` below on your phone and open it. Updates install over the previous
+version, so there's no need to uninstall. Your library, downloads and settings are kept.
+
+**PC (for syncing):** download `SignalAgent.exe` below on your Windows PC and double-click it. Setup opens in your browser.
+If Windows says "Windows protected your PC", click **More info → Run anyway**.
 FOOTER

@@ -3,7 +3,7 @@ name: Build & Release APK
 on:
   push:
     branches: ["**"]
-    paths-ignore: ["agent/**", "design/**"]
+    paths-ignore: ["design/**"]
   pull_request:
   workflow_dispatch:
 
@@ -15,8 +15,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.name }}
+      tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.gate.outputs.publish }}
+      has_key: ${{ steps.gate.outputs.has_key }}
+      apk: ${{ steps.apk.outputs.file }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +53,7 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then publish=false; reason="pull request build"; fi
           if [ "${{ github.ref_name }}" != "${{ github.event.repository.default_branch }}" ]; then publish=false; reason="not the default branch"; fi
           if git rev-parse -q --verify "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null; then publish=false; reason="${{ steps.version.outputs.tag }} already released (bump VERSION_NAME in version.properties to release again)"; fi
-          if ! scripts/release-notes.sh "${{ steps.version.outputs.name }}" > /tmp/notes.md; then publish=false; reason="CHANGELOG.md has no section for ${{ steps.version.outputs.name }}"; fi
+          if ! scripts/release-notes.sh "${{ steps.version.outputs.name }}" > /dev/null; then publish=false; reason="CHANGELOG.md has no section for ${{ steps.version.outputs.name }}"; fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
           echo "has_key=$HAS_KEY" >> "$GITHUB_OUTPUT"
           echo "Publish release: $publish ${reason:+($reason)}"
@@ -76,26 +82,67 @@ jobs:
           APK="Signal-${{ steps.version.outputs.name }}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           echo "file=$APK" >> "$GITHUB_OUTPUT"
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK" | head -5 || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.apk.outputs.file }}
+          name: apk
           path: ${{ steps.apk.outputs.file }}
 
+  agent-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build SignalAgent.exe
+        run: npm run build:exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-exe
+          path: agent/dist/SignalAgent.exe
+
+  release:
+    needs: [android, agent-windows]
+    if: needs.android.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Require release signing key
-        if: steps.gate.outputs.publish == 'true' && steps.gate.outputs.has_key != 'true'
+        if: needs.android.outputs.has_key != 'true'
         run: |
           echo "::error::Release signing key is missing, so this version can't be published. Add the SIGNING_KEYSTORE_BASE64, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS and SIGNING_KEY_PASSWORD repository secrets, then re-run this workflow."
           exit 1
 
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
       - name: Publish GitHub release
-        if: steps.gate.outputs.publish == 'true' && steps.gate.outputs.has_key == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" "${{ steps.apk.outputs.file }}" \
+          scripts/release-notes.sh "${{ needs.android.outputs.version }}" > notes.md
+          gh release create "${{ needs.android.outputs.tag }}" \
+            "out/${{ needs.android.outputs.apk }}" \
+            "out/SignalAgent.exe" \
             --target "${{ github.sha }}" \
-            --title "Signal Player ${{ steps.version.outputs.name }}" \
-            --notes-file /tmp/notes.md \
+            --title "Signal Player ${{ needs.android.outputs.version }}" \
+            --notes-file notes.md \
             --latest

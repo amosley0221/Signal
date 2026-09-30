@@ -94,7 +94,7 @@ fun SyncScreen(c: Ctx) {
                 Column {
                     Text("No PC paired", style = T.rowSecondary)
                     Spacer(Modifier.height(4.dp))
-                    Text("Install Signal Agent on your PC (see agent/README.md in the repo), then pair to stream and download your library.", style = T.ui(13.sp), color = C.Muted)
+                    Text("On your Windows PC, download SignalAgent.exe from the Signal releases page on GitHub and double-click it. Then pair here to stream and download your library.", style = T.ui(13.sp), color = C.Muted)
                     Spacer(Modifier.height(12.dp))
                     FilledBtn("Pair a PC") { c.st.push(Screen.Pair) }
                 }
