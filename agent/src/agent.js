@@ -6,26 +6,31 @@ import { Activity } from './activity.js';
 import { Catalog } from './catalog.js';
 import { Plex } from './plex.js';
 import { createServer } from './server.js';
-import { AGENT_DIR } from './config.js';
+import { AGENT_DIR, isPackaged, isTailscaleAddress, configOverride } from './config.js';
+import { StartupEntry, launchCommand } from './desktop.js';
 import { lanAddresses, readJsonSync } from './util.js';
 
-export const VERSION = readJsonSync(path.join(AGENT_DIR, 'package.json'), {}).version || '1.0.0';
+/* global __SIGNAL_AGENT_VERSION__ -- replaced at build time in the single-executable bundle */
+export const VERSION = (typeof __SIGNAL_AGENT_VERSION__ === 'string' ? __SIGNAL_AGENT_VERSION__ : null)
+  || readJsonSync(path.join(AGENT_DIR, 'package.json'), {}).version || '1.0.0';
 const RESCAN_INTERVAL_MS = 10 * 60 * 1000;
 
 export class Agent {
   /**
    * @param {any} config normalised config (see config.js)
-   * @param {{mdns?:boolean, watch?:boolean, periodic?:boolean, logFile?:boolean, quiet?:boolean, initialScan?:boolean}} [opts]
+   * @param {{mdns?:boolean, watch?:boolean, periodic?:boolean, logFile?:boolean, quiet?:boolean, initialScan?:boolean, startup?:StartupEntry}} [opts]
    */
   constructor(config, opts = {}) {
     this.config = config;
     this.opts = { mdns: true, watch: true, periodic: true, logFile: true, quiet: false, initialScan: true, ...opts };
+    this.startup = this.opts.startup || new StartupEntry({ command: launchCommand({ packaged: isPackaged(), configOverride: configOverride() }) });
+    this.reconfiguring = Promise.resolve();
     fs.mkdirSync(config.dataDir, { recursive: true });
     this.logPath = path.join(config.dataDir, 'agent.log');
     this.log = this.log.bind(this);
     this.state = new State(config.dataDir, this.log);
     this.activity = new Activity();
-    this.plex = config.plex?.url && config.plex?.token ? new Plex(config.plex, { clientId: this.state.agentId, log: this.log }) : null;
+    this.plex = this.#makePlex(config);
     this.catalog = new Catalog({ config, state: this.state, activity: this.activity, plex: this.plex, log: this.log });
     this.server = null;
     this.port = null;
@@ -40,6 +45,10 @@ export class Agent {
         this.log(`[pair] denied "${ev.req.deviceName}"`);
       }
     });
+  }
+
+  #makePlex(config) {
+    return config.plex?.url && config.plex?.token ? new Plex(config.plex, { clientId: this.state.agentId, log: this.log }) : null;
   }
 
   log(msg) {
@@ -61,6 +70,8 @@ export class Agent {
       info: this.info(),
       port: this.port,
       configPath: this.config.configPath || null,
+      needsSetup: !this.config.libraries.length,
+      network: this.network(),
       pending: this.state.pendingPairs(),
       devices: this.state.listDevices(),
       libraries: this.catalog.getLibraries(),
@@ -68,6 +79,58 @@ export class Agent {
       scanning: !!this.catalog.scanning,
       activity: this.activity.list(),
     };
+  }
+
+  /** LAN and Tailscale (100.64.0.0/10) IPv4 addresses, for typing into the phone. */
+  network() {
+    const all = lanAddresses();
+    return { lan: all.filter((a) => !isTailscaleAddress(a)), tailscale: all.filter(isTailscaleAddress), port: this.port };
+  }
+
+  /** What the admin page's setup form edits. */
+  setupState() {
+    const c = this.config;
+    return {
+      name: c.name,
+      libraries: c.libraries.map(({ id, name, type, path: p }) => ({ id, name, type, path: p })),
+      plex: { url: c.plex?.url || '', token: c.plex?.token || '' },
+      configPath: c.configPath || null,
+      dataDir: c.dataDir,
+      platform: process.platform,
+      packaged: isPackaged(),
+      startup: this.startup.status(),
+    };
+  }
+
+  /**
+   * Apply a new config live: rebuild Plex + catalogue from the new libraries and rescan. The HTTP
+   * server keeps running (it always reads agent.catalog). Port/host/dataDir changes need a restart.
+   */
+  reconfigure(config) {
+    const run = this.reconfiguring.then(() => this.#reconfigure(config));
+    this.reconfiguring = run.catch((e) => this.log(`[config] could not apply settings: ${e.stack || e.message}`));
+    return run;
+  }
+
+  async #reconfigure(config) {
+    const old = this.config;
+    const next = { ...config, port: old.port, host: old.host, dataDir: old.dataDir };
+    this.catalog.stopWatching();
+    await this.catalog.cancelScan();
+    this.config = next;
+    this.plex = this.#makePlex(next);
+    this.catalog = new Catalog({ config: next, state: this.state, activity: this.activity, plex: this.plex, log: this.log });
+    await this.catalog.init();
+    this.log(`[config] settings saved — ${next.libraries.length} librar${next.libraries.length === 1 ? 'y' : 'ies'}${this.plex ? ', Plex on' : ''}`);
+    if (this.opts.mdns && this.server && (old.name !== next.name || !!old.plex?.token !== !!next.plex?.token)) {
+      await this.#unadvertise();
+      this.#advertise();
+    }
+    if (this.server) {
+      const scan = this.catalog.scan('settings changed').catch((e) => this.log(`[scan] ${e.message}`));
+      if (this.opts.watch) scan.then(() => this.catalog.startWatching());
+      this.lastApplyScan = scan;
+    }
   }
 
   /** Approve a pending pair request by request id or 6-digit code. Returns the request or null. */
@@ -117,15 +180,19 @@ export class Agent {
     }
   }
 
+  async #unadvertise() {
+    if (!this.bonjour) return;
+    await new Promise((r) => { try { this.bonjour.unpublishAll(() => r()); } catch { r(); } setTimeout(r, 1000).unref?.(); });
+    try { this.bonjour.destroy(); } catch { /* ignore */ }
+    this.bonjour = null;
+  }
+
   async stop() {
     clearInterval(this.timer);
+    await this.reconfiguring;
     this.catalog.stopWatching();
     this.state.saveSoon.cancel();
-    if (this.bonjour) {
-      await new Promise((r) => { try { this.bonjour.unpublishAll(() => r()); } catch { r(); } setTimeout(r, 1000).unref?.(); });
-      try { this.bonjour.destroy(); } catch { /* ignore */ }
-      this.bonjour = null;
-    }
+    await this.#unadvertise();
     if (this.server) {
       await new Promise((r) => { this.server.close(() => r()); this.server.closeAllConnections?.(); });
       this.server = null;

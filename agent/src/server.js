@@ -10,6 +10,8 @@ import { suggestArtists } from './suggest.js';
 import { mimeFor, hasExecutable } from './util.js';
 import { isLosslessCodec } from './media.js';
 import { adminPage } from './admin.js';
+import { validateSetup, saveSetup } from './config.js';
+import { listFolders } from './desktop.js';
 
 const MAX_JSON = 1024 * 1024;
 
@@ -100,7 +102,8 @@ const localHost = (req) => /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(req
  * @param {import('./agent.js').Agent} agent
  */
 export function createServer(agent) {
-  const { catalog, state, activity } = agent;
+  const { state, activity } = agent;
+  // agent.catalog is replaced when settings are saved, so always read it through the agent.
 
   const routes = [];
   const route = (method, pattern, handler, { auth = true } = {}) => {
@@ -122,17 +125,17 @@ export function createServer(agent) {
   route('GET', '/api/pair/status/:id', (req, res, p) => sendJson(req, res, 200, state.pairStatus(p.id)), { auth: false });
 
   // ---- authenticated ----
-  route('GET', '/api/libraries', (req, res) => sendJson(req, res, 200, catalog.getLibraries()));
-  route('GET', '/api/catalog', (req, res) => sendJson(req, res, 200, catalog.getCatalog()));
+  route('GET', '/api/libraries', (req, res) => sendJson(req, res, 200, agent.catalog.getLibraries()));
+  route('GET', '/api/catalog', (req, res) => sendJson(req, res, 200, agent.catalog.getCatalog()));
   route('GET', '/api/activity', (req, res) => sendJson(req, res, 200, activity.list()));
 
   route('POST', '/api/rescan', (req, res) => {
-    catalog.scan('requested by app').catch(() => {});
+    agent.catalog.scan('requested by app').catch(() => {});
     sendJson(req, res, 200, { ok: true });
   });
 
   const streamHandler = (req, res, p) => {
-    const it = catalog.get(p.id);
+    const it = agent.catalog.get(p.id);
     if (!it || it.type === 'show') return notFound(req, res);
     return sendFile(req, res, it.abs);
   };
@@ -140,7 +143,7 @@ export function createServer(agent) {
   route('HEAD', '/api/stream/:id', streamHandler);
 
   const downloadHandler = async (req, res, p, q) => {
-    const it = catalog.get(p.id);
+    const it = agent.catalog.get(p.id);
     if (!it || it.type === 'show') return notFound(req, res);
     const name = path.basename(it.abs);
     const quality = q.get('quality') || 'original';
@@ -172,7 +175,7 @@ export function createServer(agent) {
   route('HEAD', '/api/download/:id', downloadHandler);
 
   route('GET', '/api/art/:id', async (req, res, p, q) => {
-    const a = await catalog.art(p.id, q.get('kind') || 'cover');
+    const a = await agent.catalog.art(p.id, q.get('kind') || 'cover');
     if (!a) return notFound(req, res);
     if (a.data) {
       res.writeHead(200, { 'Content-Type': a.mime, 'Content-Length': a.data.length, 'Cache-Control': 'max-age=3600' });
@@ -189,26 +192,26 @@ export function createServer(agent) {
   });
 
   route('GET', '/api/subtitle/:videoId/:subId', (req, res, p) => {
-    const f = catalog.subtitle(p.videoId, p.subId);
+    const f = agent.catalog.subtitle(p.videoId, p.subId);
     if (!f) return notFound(req, res);
     return sendFile(req, res, f);
   });
 
   route('GET', '/api/lyrics/:id', async (req, res, p) => {
-    const l = await catalog.lyrics(p.id);
+    const l = await agent.catalog.lyrics(p.id);
     if (!l) return notFound(req, res);
     sendJson(req, res, 200, l);
   });
 
   route('POST', '/api/tags/:id', async (req, res, p) => {
     const body = await readJson(req);
-    const r = await catalog.editTags(p.id, body);
+    const r = await agent.catalog.editTags(p.id, body);
     sendJson(req, res, r.status, r.body);
   });
 
   route('POST', '/api/suggest-artists', async (req, res) => {
     const body = await readJson(req);
-    const input = await catalog.suggestInput(String(body.trackId || ''));
+    const input = await agent.catalog.suggestInput(String(body.trackId || ''));
     if (!input) return notFound(req, res);
     sendJson(req, res, 200, suggestArtists(input.track, input.all, typeof body.prompt === 'string' ? body.prompt : ''));
   });
@@ -217,14 +220,14 @@ export function createServer(agent) {
     const lib = q.get('library');
     const name = q.get('name');
     if (!lib || !name) return badRequest(req, res);
-    const r = await catalog.upload(lib, name, req);
+    const r = await agent.catalog.upload(lib, name, req);
     sendJson(req, res, r.status, r.body);
   });
 
   route('POST', '/api/progress', async (req, res) => {
     const body = await readJson(req);
     if (!body.id) return badRequest(req, res);
-    const r = await catalog.progress(body);
+    const r = await agent.catalog.progress(body);
     sendJson(req, res, r.status, r.body);
   });
 
@@ -250,8 +253,35 @@ export function createServer(agent) {
     sendJson(req, res, ok ? 200 : 404, ok ? { ok: true } : { error: 'not_found' });
   });
   admin('POST', '/admin/rescan', (req, res) => {
-    catalog.scan('admin page').catch(() => {});
+    agent.catalog.scan('admin page').catch(() => {});
     sendJson(req, res, 200, { ok: true });
+  });
+  admin('GET', '/admin/setup', (req, res) => sendJson(req, res, 200, agent.setupState()));
+  admin('POST', '/admin/setup', async (req, res) => {
+    const body = await readJson(req);
+    const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+    const v = validateSetup(body, { isDir });
+    if (!v.ok) return sendJson(req, res, 400, { error: 'invalid', errors: v.errors });
+    if (!agent.config.configPath) return sendJson(req, res, 409, { error: 'no_config_file' });
+    let cfg;
+    try {
+      cfg = await saveSetup(agent.config.configPath, v.setup);
+    } catch (e) {
+      return sendJson(req, res, 500, { error: 'write_failed', errors: [{ field: 'config', message: `Could not save ${agent.config.configPath}: ${e.message}` }] });
+    }
+    agent.reconfigure(cfg).catch(() => {});
+    sendJson(req, res, 200, { ok: true, setup: { ...agent.setupState(), name: cfg.name, libraries: v.setup.libraries, plex: v.setup.plex } });
+  });
+  // Folder picker for the setup page. Also needs the X-Signal-Admin header (so other web pages can't use it).
+  admin('GET', '/admin/browse', async (req, res, p, q) => {
+    if (req.headers['x-signal-admin'] !== '1') return sendJson(req, res, 403, { error: 'forbidden' });
+    sendJson(req, res, 200, await listFolders(q.get('path') || ''));
+  });
+  admin('POST', '/admin/startup', async (req, res) => {
+    const body = await readJson(req);
+    const st = await agent.startup.set(!!body.enabled);
+    if (st.ok && st.supported) agent.log(`[startup] Start with Windows ${body.enabled ? 'on' : 'off'} (${st.file})`);
+    sendJson(req, res, 200, st);
   });
 
   const server = http.createServer(async (req, res) => {

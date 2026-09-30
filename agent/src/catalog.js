@@ -63,10 +63,17 @@ export class Catalog {
         this.log(`[plex] not reachable: ${e.message}`);
       }
     }
-    if (!this.libraries.length) this.log(`[config] no libraries configured — edit ${this.config.configPath || 'signal-agent.config.json'}`);
+    if (!this.libraries.length) this.log('[config] no libraries configured yet — add your folders on the setup page (http://localhost:<port>/ on this PC)');
     // drop cache for libraries that no longer exist
     for (const id of Object.keys(this.cache.libs)) if (!this.libraries.some((l) => l.id === id)) delete this.cache.libs[id];
     this.build();
+  }
+
+  /** Stop a running scan early (used when settings change); resolves once it has wound down. */
+  cancelScan() {
+    this.stopRequested = true;
+    this.rescanQueued = false;
+    return (this.scanning || Promise.resolve()).catch(() => {});
   }
 
   lib(id) { return this.libraries.find((l) => l.id === id) || null; }
@@ -99,6 +106,7 @@ export class Catalog {
       }
     }
     for (const lib of this.libraries) {
+      if (this.stopRequested) break;
       const job = this.activity.add('scan', `Scan ${lib.name}`, reason === 'startup' ? 'Startup scan' : `Rescan (${reason})`);
       try {
         const r = await this.#scanLibrary(lib, job);
@@ -172,6 +180,7 @@ export class Catalog {
     let done = 0;
     job.progressTo(0, `${files.length} files`);
     await mapLimit(files, 4, async (f) => {
+      if (this.stopRequested) throw new Error('stopped (settings changed)');
       const role = this.roleFor(lib, f.kind);
       if (role) {
         const rel = toPosix(path.relative(root, f.abs));

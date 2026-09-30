@@ -20,5 +20,9 @@
     "bonjour-service": "^1.4.4",
     "music-metadata": "^11.16.1",
     "node-id3": "^0.2.9"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6"
   }
 }
