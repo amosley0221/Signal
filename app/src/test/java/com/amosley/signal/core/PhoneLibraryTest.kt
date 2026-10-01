@@ -114,3 +114,19 @@ class OnlineVideoInfoTest {
         assertEquals("o.jpg", out.posterUrl)
     }
 }
+
+class PhoneMatchTest {
+    private fun ep(s: Int, e: Int, id: String) = com.amosley.signal.core.Episode(id = id, season = s, episode = e, title = "t$e")
+
+    @Test fun showsWithTheSameTitleStaySeparate() {
+        val dahmer = com.amosley.signal.core.Show(id = "a", title = "Monster", seasons = listOf(com.amosley.signal.core.Season(1, (1..10).map { ep(1, it, "d$it") })))
+        val gein = com.amosley.signal.core.Show(id = "b", title = "Monster", seasons = listOf(
+            com.amosley.signal.core.Season(1, (1..8).map { ep(1, it, "g$it") }), com.amosley.signal.core.Season(4, (1..8).map { ep(4, it, "l$it") })))
+        assertEquals(listOf("a", "b"), com.amosley.signal.data.PhoneMatch.shows(listOf(dahmer, gein), emptyList()).map { it.id })
+        // A phone copy goes to the same-titled show that has its episodes.
+        val phone = com.amosley.signal.core.Show(id = "locs:monster", title = "Monster", seasons = listOf(com.amosley.signal.core.Season(4, listOf(ep(4, 2, "p").copy(uri = "content://x")))))
+        val out = com.amosley.signal.data.PhoneMatch.shows(listOf(dahmer, gein), listOf(phone))
+        assertEquals(2, out.size)
+        assertEquals("content://x", out[1].seasons[1].episodes[1].uri)
+    }
+}

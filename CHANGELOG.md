@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.44] - 2026-10-01
+
+- **TV shows with the same name no longer replace each other.** Plex has two shows called "Monster (2022)": the Dahmer series and the one with the Ed Gein and Lizzie Borden seasons. Signal was showing the Dahmer series twice and hiding the other one. Both now appear, each with its own seasons and poster.
+
 ## [1.0.43] - 2026-10-01
 
 - **Sonos:** the on-screen volume message shown when you press the volume buttons ("Office + 1 volume · 21") now shows the speaker's real new level, reported back by Sonos, instead of the app's guess.

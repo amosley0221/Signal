@@ -128,14 +128,17 @@ object PhoneMatch {
     }
 
     fun shows(pc: List<Show>, phone: List<Show>): List<Show> {
-        val byKey = pc.associateBy { com.amosley.signal.core.VideoNames.norm(it.title) }.toMutableMap()
+        // Several PC shows can share a title (Plex keeps "Monster (2022)" twice), so match by position, never by title alone.
+        val merged = pc.toMutableList()
         val extra = mutableListOf<Show>()
         for (ps in phone) {
             val key = com.amosley.signal.core.VideoNames.norm(ps.title)
-            val target = byKey[key]
+            val have = ps.seasons.flatMap { se -> se.episodes.map { se.number to it.episode } }.toSet()
+            val target = merged.indices.filter { com.amosley.signal.core.VideoNames.norm(merged[it].title) == key }
+                .maxByOrNull { i -> merged[i].seasons.sumOf { se -> se.episodes.count { (se.number to it.episode) in have } } }
             if (target == null) { extra += ps; continue }
             // Point matching PC episodes at the phone file; add phone-only episodes to their season.
-            val seasons = target.seasons.associateBy { it.number }.toMutableMap()
+            val seasons = merged[target].seasons.associateBy { it.number }.toMutableMap()
             for (se in ps.seasons) for (ep in se.episodes) {
                 val season = seasons[se.number] ?: Season(se.number)
                 val i = season.episodes.indexOfFirst { it.episode == ep.episode }
@@ -143,9 +146,8 @@ object PhoneMatch {
                 if (i >= 0) eps[i] = eps[i].copy(uri = ep.uri) else eps += ep
                 seasons[se.number] = season.copy(episodes = eps.sortedBy { it.episode })
             }
-            byKey[key] = target.copy(seasons = seasons.values.sortedBy { it.number })
+            merged[target] = merged[target].copy(seasons = seasons.values.sortedBy { it.number })
         }
-        val merged = pc.map { byKey[com.amosley.signal.core.VideoNames.norm(it.title)] ?: it }
         return merged + extra
     }
 }
