@@ -314,6 +314,10 @@ class Repository(val context: Context, val scope: CoroutineScope) {
                 if (info.version != p.agentVersion || info.name != p.name || info.plex != p.plex) {
                     updateSettings { s -> s.copy(pc = s.pc?.copy(agentVersion = info.version, name = info.name, plex = info.plex)) }
                 }
+                // The router may have given the PC a new home address: speakers are sent there, so keep it current.
+                com.amosley.signal.core.LanUrl.refreshed(p.lanUrl, info.addresses, com.amosley.signal.playback.wifiAddress(context))?.let { fresh ->
+                    updateSettings { s -> s.copy(pc = s.pc?.copy(lanUrl = fresh)) }
+                }
                 _status.update { it.copy(reachable = true, checking = false, baseUrl = url, viaRemote = remote, error = null) }
                 return url
             }

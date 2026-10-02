@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.45] - 2026-10-02
+
+- **Sonos: songs that are on the phone always play.** If a Sonos speaker can't fetch a song from the PC, Signal now sends it the copy downloaded on the phone instead, rather than giving up with "couldn't load". Once that happens, later songs go straight to the phone copy.
+- **Signal follows the PC to a new home-network address.** Signal remembered the PC's home address from when you paired and sent speakers there forever. If the router later gave the PC a different address, the phone still reached the PC over Tailscale, but Sonos couldn't. Signal now updates the address on its own.
+
 ## [1.0.44] - 2026-10-01
 
 - **TV shows with the same name no longer replace each other.** Plex has two shows called "Monster (2022)": the Dahmer series and the one with the Ed Gein and Lizzie Borden seasons. Signal was showing the Dahmer series twice and hiding the other one. Both now appear, each with its own seasons and poster.

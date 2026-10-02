@@ -402,6 +402,10 @@ class SonosOutput(
     private var loadedAt = 0L
     /** Extra Play commands sent while waiting for the speaker to start (it ignores Play until it's ready). */
     private var playRetries = 0
+    /** The other source for the song being loaded (phone copy or PC), tried once if the first one won't load. */
+    private var alternate: RemoteItem? = null
+    /** Once the PC route has failed, try phone copies first for the rest of this session. */
+    @Volatile private var preferPhone = false
 
     private fun run(block: suspend () -> Unit) = scope.launch {
         runCatching { block() }.onFailure { onError("${room.name} couldn't play this song (${it.message ?: "error"})") }
@@ -414,8 +418,10 @@ class SonosOutput(
         expectedDuration = item.durationMs
         sawPlaying = false
         _state.value = RemoteState(positionMs = startMs, durationMs = item.durationMs, playing = play)
+        val first = if (preferPhone) item.fallback ?: item else item
+        alternate = if (first === item) item.fallback else item
         run {
-            sonos.setUri(room, item)
+            sonos.setUri(room, first)
             loaded = true
             loadedAt = if (play) System.currentTimeMillis() else 0L
             playRetries = 0
@@ -439,6 +445,16 @@ class SonosOutput(
                 val d = if (dur > 0) dur else expectedDuration
                 val waiting = loadedAt > 0 && !sawPlaying && (st == "STOPPED" || st == "PAUSED_PLAYBACK")
                 val waited = System.currentTimeMillis() - loadedAt
+                val fb = alternate
+                if (waiting && st == "STOPPED" && waited > 7_000 && fb != null) {
+                    // The speaker couldn't fetch the song from where it was sent: play it from the other source.
+                    alternate = null
+                    preferPhone = fb.fallback == null
+                    runCatching { sonos.setUri(room, fb); sonos.play(room) }
+                    loadedAt = System.currentTimeMillis()
+                    playRetries = 0
+                    continue
+                }
                 if (waiting && playRetries < 4 && waited > (playRetries + 1) * 2_500L) {
                     // Loaded but not started: the first Play arrived before the speaker was ready. Ask again.
                     playRetries++

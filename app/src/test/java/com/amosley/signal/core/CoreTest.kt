@@ -1,6 +1,7 @@
 package com.amosley.signal.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -205,5 +206,16 @@ class VideoNamesTest {
         val pc = listOf(Movie("m1", title = "Minions & Monsters", year = 2026), Movie("m2", title = "Other", year = 2026))
         assertEquals("m1", VideoNames.matchMovie(VideoNames.parse("Minions.and.Monsters.2026.2160p.mkv"), pc)?.id)
         assertEquals(null, VideoNames.matchMovie(VideoNames.Parsed("Minions and Monsters", 2010), pc))
+    }
+}
+
+class LanUrlTest {
+    @Test fun followsThePcToItsNewHomeAddress() {
+        val pc = listOf("192.168.1.37", "172.20.0.1", "100.101.5.6")
+        assertEquals("http://192.168.1.37:8765", LanUrl.refreshed("http://192.168.1.20:8765", pc, "192.168.1.50"))
+        assertNull(LanUrl.refreshed("http://192.168.1.37:8765", pc, "192.168.1.50")) // unchanged
+        assertNull(LanUrl.refreshed("http://192.168.1.20:8765", pc, null)) // phone not on Wi-Fi
+        assertNull(LanUrl.refreshed("http://192.168.1.20:8765", pc, "10.0.0.5")) // phone on another network
+        assertNull(LanUrl.refreshed("http://tone-pc2:8765", pc, "192.168.1.50")) // a name, not an address
     }
 }

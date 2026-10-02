@@ -63,7 +63,10 @@ interface RemoteOutput {
     suspend fun adjustVolume(delta: Int): Int? { val v = (volume() ?: return null) + delta; setVolume(v.coerceIn(0, 100)); return v.coerceIn(0, 100) }
 }
 
-data class RemoteItem(val url: String, val title: String, val artist: String?, val album: String?, val artUrl: String?, val mime: String, val durationMs: Long, val isVideo: Boolean = false)
+data class RemoteItem(val url: String, val title: String, val artist: String?, val album: String?, val artUrl: String?, val mime: String, val durationMs: Long, val isVideo: Boolean = false,
+    /** The same song served from the phone, tried when the speaker can't fetch [url] from the PC. */
+    val fallback: RemoteItem? = null,
+)
 data class RemoteState(val positionMs: Long = 0, val durationMs: Long = 0, val playing: Boolean = false, val ended: Boolean = false, val error: String? = null)
 
 /**
@@ -482,8 +485,16 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         if (pcUp) {
             val transcode = forSonos && hiRes
             val url = (if (transcode) repo.speakerTranscodedUrl(t.id) else repo.speakerStreamUrl(t.id)) ?: return null
-            return RemoteItem(url, t.title, t.artist, t.album, if (t.hasArt) repo.speakerArtUrl(t.id) else null, if (transcode) "audio/flac" else mimeOf(t.container), t.durationMs)
+            return RemoteItem(url, t.title, t.artist, t.album, if (t.hasArt) repo.speakerArtUrl(t.id) else null, if (transcode) "audio/flac" else mimeOf(t.container), t.durationMs,
+                fallback = phoneItem(t))
         }
+        val item = phoneItem(t) ?: return null
+        if (forSonos && hiRes) onToast("${t.title} is hi-res; Sonos may not play files above 48 kHz from the phone")
+        return item
+    }
+
+    /** The song served to the speaker from the phone itself (a download or a phone file), or null if it isn't on the phone. */
+    private fun phoneItem(t: Track): RemoteItem? {
         val file = repo.downloads.fileFor(t.id)
         val uri = when {
             file != null -> Uri.fromFile(file)
@@ -492,7 +503,6 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         }
         val mime = if (file != null && file.extension.equals("flac", true)) "audio/flac" else mimeOf(t.container)
         val url = localServer.urlFor(t.id, uri, mime) ?: return null
-        if (forSonos && hiRes) onToast("${t.title} is hi-res; Sonos may not play files above 48 kHz from the phone")
         return RemoteItem(url, t.title, t.artist, t.album, null, mime, t.durationMs)
     }
 

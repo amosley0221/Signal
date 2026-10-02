@@ -49,21 +49,7 @@ class LocalMediaServer(private val context: Context) {
      * The phone's Wi-Fi IPv4 address, or null when not on a network. Not the active network's: with a VPN
      * such as Tailscale on, that is the VPN's 100.x address, which speakers at home can't reach.
      */
-    private fun lanAddress(): String? {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        @Suppress("DEPRECATION")
-        val nets = cm.allNetworks.filter { n ->
-            val caps = cm.getNetworkCapabilities(n) ?: return@filter false
-            !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) &&
-                (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
-        } + listOfNotNull(cm.activeNetwork)
-        for (n in nets) {
-            val lp = cm.getLinkProperties(n) ?: continue
-            lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress && !it.hostAddress.orEmpty().startsWith("100.") }
-                ?.let { return it.hostAddress }
-        }
-        return null
-    }
+    private fun lanAddress(): String? = wifiAddress(context)
 
     /** Returns an http:// URL a speaker on the same network can fetch, or null when offline. */
     fun urlFor(id: String, uri: Uri, mime: String): String? {
@@ -151,4 +137,21 @@ class LocalMediaServer(private val context: Context) {
         out.write("HTTP/1.1 $code $text\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
         out.flush()
     }
+}
+
+/** The phone's Wi-Fi IPv4 address (never the VPN's 100.x), or null when not on Wi-Fi. */
+fun wifiAddress(context: Context): String? {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    @Suppress("DEPRECATION")
+    val nets = cm.allNetworks.filter { n ->
+        val caps = cm.getNetworkCapabilities(n) ?: return@filter false
+        !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) &&
+            (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET))
+    } + listOfNotNull(cm.activeNetwork)
+    for (n in nets) {
+        val lp = cm.getLinkProperties(n) ?: continue
+        lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress && !it.hostAddress.orEmpty().startsWith("100.") }
+            ?.let { return it.hostAddress }
+    }
+    return null
 }
