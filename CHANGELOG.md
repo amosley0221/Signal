@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.48] - 2026-10-07
+
+- **Import playlists from Apple Music.** In Music → Playlists, tap **Import from Apple Music** and paste a playlist's share link. You can also tap Share in Apple Music and pick Signal. Signal reads the song list and matches each song to your library by title and artist, ignoring "(feat. …)", "Remastered" tags and accents. You can rename the playlist before creating it, and see the songs you don't have.
+- **Import exported playlist files too.** For long or private playlists, export the playlist from the Apple Music or iTunes app on your PC (File → Library → Export Playlist, as .txt or .xml) and pick the file in the same screen. .m3u playlists work as well.
+
 ## [1.0.47] - 2026-10-07
 
 - **Sonos bass, treble and loudness.** While playing on Sonos, open **Play on** and tap **Bass & treble** under the volume to adjust each speaker's bass and treble (-10 to +10) and switch Loudness on or off. When rooms are grouped, each room gets its own controls. These are the same settings as the EQ in the Sonos app, so they stay on the speaker. **Reset** puts a room back to Sonos's defaults.

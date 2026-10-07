@@ -812,6 +812,26 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         return pl
     }
 
+    /** A new playlist holding [trackIds] in order (an imported playlist). */
+    fun createPlaylist(name: String, trackIds: List<String>): UserPlaylist {
+        val pl = UserPlaylist(UUID.randomUUID().toString(), name.trim().ifEmpty { "Imported playlist" }, trackIds, System.currentTimeMillis())
+        _playlists.update { listOf(pl) + it }
+        playlistsStore.save(_playlists.value)
+        return pl
+    }
+
+    /** Reads the song list from a shared Apple Music playlist page (no Apple sign-in needed; the playlist must be shared). */
+    suspend fun readAppleMusicPlaylist(url: String): com.amosley.signal.core.PlaylistImport.Parsed = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val req = okhttp3.Request.Builder().url(url)
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .build()
+        http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw java.io.IOException(if (r.code == 404) "Apple Music couldn't find that playlist" else "Apple Music answered ${r.code}")
+            com.amosley.signal.core.PlaylistImport.fromApplePage(r.body?.string().orEmpty())
+        }
+    }
+
     fun addToPlaylist(playlistId: String, trackId: String) {
         _playlists.update { all -> all.map { if (it.id == playlistId && trackId !in it.trackIds) it.copy(trackIds = it.trackIds + trackId) else it } }
         playlistsStore.save(_playlists.value)

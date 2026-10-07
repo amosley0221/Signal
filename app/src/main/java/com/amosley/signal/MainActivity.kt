@@ -34,6 +34,23 @@ class MainActivity : ComponentActivity() {
         app.repo.rescanPhone()
         app.repo.startAutoRefresh()
         app.hub.connectSession()
+        handleShare(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShare(intent)
+    }
+
+    /** A link shared to Signal (Apple Music → Share): open the playlist import with it. */
+    private fun handleShare(intent: android.content.Intent?) {
+        if (intent?.action != android.content.Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT).orEmpty()
+        val link = com.amosley.signal.core.PlaylistImport.appleMusicLink(text)
+        if (link != null) state.sheet = com.amosley.signal.ui.Sheet.ImportPlaylist(link)
+        else app.toast("Share an Apple Music playlist link to import it")
+        intent.action = null
     }
 
     /**

@@ -68,6 +68,7 @@ import com.amosley.signal.core.Eq
 import com.amosley.signal.core.EqSettings
 import com.amosley.signal.core.Fmt
 import com.amosley.signal.core.Origin
+import com.amosley.signal.core.PlaylistImport
 import com.amosley.signal.data.DlState
 import com.amosley.signal.playback.OutputKind
 import com.amosley.signal.ui.Ctx
@@ -140,6 +141,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.Art -> ArtSheet(c, sheet.album, sheet.artist)
                 is Sheet.FixMatch -> FixMatchSheet(c, sheet.movieId, sheet.showKey)
                 is Sheet.Equalizer -> EqSheet(c)
+                is Sheet.ImportPlaylist -> ImportPlaylistSheet(c, sheet.link)
                 is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit
             }
         }
@@ -886,5 +888,119 @@ private fun ToneLevel(label: String, value: Int, onChange: (Int) -> Unit, onDone
             colors = SliderDefaults.colors(thumbColor = C.Amber, activeTrackColor = C.HairStrong, inactiveTrackColor = C.HairStrong, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
         )
         Mono((if (value > 0) "+" else "") + value, style = T.metaMono, color = if (value == 0) C.Faint else C.Fg, modifier = Modifier.width(36.dp).padding(start = 8.dp))
+    }
+}
+
+// ---- Import a playlist (Apple Music) ------------------------------------------------------------
+
+@Composable
+private fun ColumnScope.ImportPlaylistSheet(c: Ctx, sharedLink: String?) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var link by remember { mutableStateOf(sharedLink.orEmpty()) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var parsed by remember { mutableStateOf<PlaylistImport.Parsed?>(null) }
+    var name by remember { mutableStateOf("") }
+    var showMissing by remember { mutableStateOf(false) }
+    fun got(p: PlaylistImport.Parsed) {
+        if (p.entries.isEmpty()) { error = "No songs found. If it's an Apple Music link, make sure the playlist is shared publicly."; return }
+        parsed = p; name = p.name.orEmpty(); error = null
+    }
+    fun readLink(raw: String) {
+        val url = PlaylistImport.appleMusicLink(raw) ?: run { error = "Paste a music.apple.com playlist link"; return }
+        busy = true; error = null
+        scope.launch {
+            runCatching { c.repo.readAppleMusicPlaylist(url) }
+                .onSuccess { got(it) }
+                .onFailure { error = "Couldn't read the playlist: ${it.message ?: "no connection"}" }
+            busy = false
+        }
+    }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true; error = null
+        scope.launch {
+            runCatching {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: ByteArray(0)
+                    val fileName = context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { cur -> if (cur.moveToFirst()) cur.getString(0) else null }
+                    PlaylistImport.fromFile(PlaylistImport.decode(bytes), fileName)
+                }
+            }.onSuccess { got(it) }.onFailure { error = "Couldn't read that file: ${it.message ?: "error"}" }
+            busy = false
+        }
+    }
+    // Opened from Apple Music's Share button: read the link straight away.
+    LaunchedEffect(sharedLink) { if (sharedLink != null && parsed == null) readLink(sharedLink) }
+
+    val p = parsed
+    if (p == null) {
+        SheetHeader("Import playlist", "From Apple Music · matched to songs in your library", "Cancel", { c.st.sheet = null })
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            Mono("Apple Music link", color = C.Muted)
+            Spacer(Modifier.height(8.dp))
+            Field(link, { link = it; error = null }, "https://music.apple.com/…/playlist/…")
+            Spacer(Modifier.height(6.dp))
+            Text("In Apple Music, open the playlist, tap Share → Copy Link, and paste it here. You can also share the link straight to Signal.",
+                style = T.ui(12.5.sp), color = C.Muted)
+            Spacer(Modifier.height(10.dp))
+            FilledBtn(if (busy) "Reading…" else "Read playlist", bg = C.Amber, fg = C.OnAmber, enabled = !busy && link.isNotBlank(), modifier = Modifier.fillMaxWidth()) { readLink(link) }
+            error?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = T.ui(13.sp), color = C.AmberText)
+            }
+            Spacer(Modifier.height(22.dp))
+            Hairline()
+            Spacer(Modifier.height(14.dp))
+            Mono("Or an exported file", color = C.Muted)
+            Spacer(Modifier.height(6.dp))
+            Text("For long or private playlists: in the Apple Music or iTunes app on your PC, select the playlist, choose File → Library → Export Playlist, and save it as .txt or .xml. Then pick that file here (.m3u works too).",
+                style = T.ui(12.5.sp), color = C.Muted)
+            Spacer(Modifier.height(10.dp))
+            OutlineBtn("Choose file") { if (!busy) picker.launch(arrayOf("*/*")) }
+            if (busy) {
+                Spacer(Modifier.height(12.dp))
+                Spinner(Modifier.size(16.dp))
+            }
+        }
+        return
+    }
+
+    val matches = remember(p, c.lib.tracks) { PlaylistImport.match(p.entries, c.lib.tracks) }
+    val found = matches.mapNotNull { it.trackId }
+    val missing = matches.filter { it.trackId == null }
+    SheetHeader("Import playlist", "${found.size} of ${p.entries.size} songs are in your library", "Back", { parsed = null })
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+        Mono("Name", color = C.Muted)
+        Spacer(Modifier.height(8.dp))
+        Field(name, { name = it }, "Playlist name")
+        val total = p.declaredCount
+        if (total != null && total > p.entries.size) {
+            Spacer(Modifier.height(10.dp))
+            Text("Apple's page only listed the first ${p.entries.size} of $total songs. To get them all, export the playlist from the Apple Music app on your PC and import the file.",
+                style = T.ui(12.5.sp), color = C.AmberText)
+        }
+        Spacer(Modifier.height(14.dp))
+        FilledBtn("Create playlist · ${found.size} song${if (found.size != 1) "s" else ""}", bg = C.Amber, fg = C.OnAmber, enabled = found.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+            val pl = c.repo.createPlaylist(name.ifBlank { p.name ?: "Imported playlist" }, found)
+            c.st.sheet = null
+            c.toast("Created ${pl.name} · ${found.size} songs" + if (missing.isNotEmpty()) " (${missing.size} not in your library)" else "")
+        }
+        if (missing.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth().clickable { showMissing = !showMissing }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Mono("Not in your library · ${missing.size}", color = C.Muted, modifier = Modifier.weight(1f))
+                Mono(if (showMissing) "Hide" else "Show", color = C.AmberText)
+            }
+            if (showMissing) missing.forEach { m ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    Text(m.entry.title, style = T.ui(14.sp), color = C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Mono(listOfNotNull(m.entry.artist, m.entry.album).joinToString(" · ").ifEmpty { "Unknown artist" }, style = T.metaMono, color = C.Faint)
+                }
+                Hairline()
+            }
+        }
     }
 }
