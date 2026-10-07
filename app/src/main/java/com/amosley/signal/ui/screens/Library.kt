@@ -565,6 +565,19 @@ private fun LazyListScope.playlists(c: Ctx) {
         }
     }
     item {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 6.dp).clickable { c.st.push(Screen.Store()) }
+                .drawBehind {
+                    drawRect(C.HairStrong, style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))))
+                }.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Add, null, tint = C.AmberText)
+            Spacer(Modifier.width(10.dp))
+            Text("Buy music on Qobuz", style = T.row)
+        }
+    }
+    item {
         val favs = c.lib.tracks.filter { c.isFavorite(it.id) }
         PlaylistRow(c, "Favorites", "${favs.size} song${if (favs.size != 1) "s" else ""} · tap ♥ on any song", Screen.FAVORITES, favs.firstOrNull())
     }

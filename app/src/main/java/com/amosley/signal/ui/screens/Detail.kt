@@ -327,6 +327,10 @@ fun ArtistScreen(c: Ctx, name: String) {
                 meta = "Artist · ${tracks.size} songs · ${albums.size} album${if (albums.size != 1) "s" else ""}", tracks = tracks, round = true,
                 changeArt = "Change artist picture",
                 onChangeArt = { c.st.sheet = Sheet.Art(album = null, artist = name) },
+                extra = {
+                    Mono("More by $name on Qobuz ›", color = C.AmberText, style = T.metaMono,
+                        modifier = Modifier.clickable { c.st.push(Screen.Store(com.amosley.signal.core.StoreFiles.qobuzSearch(name))) }.padding(top = 14.dp, bottom = 4.dp))
+                },
             )
         }
         if (albums.isNotEmpty()) {

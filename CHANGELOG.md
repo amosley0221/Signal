@@ -3,6 +3,13 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.49] - 2026-10-07
+
+- **Buy music on Qobuz from inside Signal.** In Music → Playlists, tap **Buy music on Qobuz** to open the Qobuz store in Signal. Sign in to your Qobuz account (use email and password, since Google sign-in doesn't work inside apps) and buy as usual. Payment goes straight to Qobuz. Signal never sees your card.
+- **Purchases go straight into your library.** On the download page of a purchase, tap **Download** next to the album or a song. Signal saves it to Music/Signal on the phone, unzips albums, and adds the songs to your library. Progress shows at the bottom of the store.
+- **Downloaded in Chrome instead?** Tap **Add file** in the store and pick the downloaded ZIP or song. Signal adds it the same way.
+- **"Find on Qobuz" shortcuts:** an artist's page has "More by … on Qobuz", and songs a playlist import couldn't find have a "Qobuz ›" link.
+
 ## [1.0.48] - 2026-10-07
 
 - **Import playlists from Apple Music.** In Music → Playlists, tap **Import from Apple Music** and paste a playlist's share link. You can also tap Share in Apple Music and pick Signal. Signal reads the song list and matches each song to your library by title and artist, ignoring "(feat. …)", "Remastered" tags and accents. You can rename the playlist before creating it, and see the songs you don't have.

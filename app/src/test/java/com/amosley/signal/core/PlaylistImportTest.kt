@@ -80,3 +80,16 @@ class PlaylistImportTest {
         assertEquals("https://music.apple.com/us/playlist/gym/pl.u-abc", PlaylistImport.appleMusicLink("Check this out https://music.apple.com/us/playlist/gym/pl.u-abc"))
     }
 }
+
+class StoreFilesTest {
+    @Test fun namesFromHeadersAndZips() {
+        assertEquals("Future - Monster.zip", StoreFiles.fileName("https://x/y?z=1", "attachment; filename*=UTF-8''Future%20-%20Monster.zip"))
+        assertEquals("01 Radical.flac", StoreFiles.fileName("https://x/y", "attachment; filename=\"01 Radical.flac\""))
+        assertEquals("track.flac", StoreFiles.fileName("https://x/dl/track.flac?sig=1", null))
+        assertEquals("Music/Signal/Future - Monster/" to "01 - Radical.flac", StoreFiles.zipTarget("Future - Monster/01 - Radical.flac", "a.zip"))
+        assertEquals("Music/Signal/Monster/" to "01.flac", StoreFiles.zipTarget("../01.flac", "Monster.zip"))
+        assertNull(StoreFiles.zipTarget("Future - Monster/cover.jpg", "a.zip"))
+        assertNull(StoreFiles.zipTarget("Future - Monster/", "a.zip"))
+        assertEquals("AC_DC_ Back", StoreFiles.clean("AC/DC: Back"))
+    }
+}

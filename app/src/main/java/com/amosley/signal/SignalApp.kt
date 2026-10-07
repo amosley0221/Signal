@@ -36,6 +36,9 @@ class SignalApp : Application(), ImageLoaderFactory {
     @Volatile var videoStreaming = false
     lateinit var sonos: SonosController
         private set
+    /** Music bought in the in-app store, saved to the phone. */
+    lateinit var store: com.amosley.signal.data.StoreDownloads
+        private set
     private val _toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val toasts: SharedFlow<String> = _toasts
 
@@ -61,6 +64,7 @@ class SignalApp : Application(), ImageLoaderFactory {
         hub = PlayerHub(this, repo, scope)
         repo.downloads.holdWhile = { hub.streamingFromPc || videoStreaming }
         hub.onToast = ::toast
+        store = com.amosley.signal.data.StoreDownloads(this, repo.http, scope, onSaved = { repo.addStoreFolder(); repo.rescanPhone() }, toast = ::toast)
         sonos = SonosController(this, repo.http, scope)
         cast = CastManager(this) { output ->
             when {

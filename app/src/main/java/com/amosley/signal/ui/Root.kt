@@ -184,6 +184,7 @@ private fun ScreenContent(c: Ctx, screen: Screen) {
         is Screen.Pair -> PairScreen(c)
         is Screen.PhoneFolders -> PhoneFoldersScreen(c)
         is Screen.Settings -> SettingsScreen(c)
+        is Screen.Store -> com.amosley.signal.ui.screens.StoreScreen(c, screen.url)
         is Screen.Video -> Unit
     }
 }

@@ -232,6 +232,13 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         }
     }
 
+    /** Purchases are saved to Music/Signal: make sure that folder is part of the music library. */
+    fun addStoreFolder() {
+        val root = com.amosley.signal.core.StoreFiles.ROOT
+        if (PhoneLibrary.rootOf(root, _settings.value.phoneFolders) != null) return
+        updateSettings { it.copy(phoneFolders = it.phoneFolders + (root to PhoneFolderType.MUSIC)) }
+    }
+
     fun rescanPhone() {
         scope.launch(Dispatchers.IO) {
             _localTracks.value = scanner.scanAudio(null)

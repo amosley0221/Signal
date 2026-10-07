@@ -995,9 +995,15 @@ private fun ColumnScope.ImportPlaylistSheet(c: Ctx, sharedLink: String?) {
                 Mono(if (showMissing) "Hide" else "Show", color = C.AmberText)
             }
             if (showMissing) missing.forEach { m ->
-                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Text(m.entry.title, style = T.ui(14.sp), color = C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Mono(listOfNotNull(m.entry.artist, m.entry.album).joinToString(" · ").ifEmpty { "Unknown artist" }, style = T.metaMono, color = C.Faint)
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(m.entry.title, style = T.ui(14.sp), color = C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Mono(listOfNotNull(m.entry.artist, m.entry.album).joinToString(" · ").ifEmpty { "Unknown artist" }, style = T.metaMono, color = C.Faint)
+                    }
+                    Mono("Qobuz ›", color = C.AmberText, style = T.metaMono, modifier = Modifier.clickable {
+                        c.st.sheet = null
+                        c.st.push(com.amosley.signal.ui.Screen.Store(com.amosley.signal.core.StoreFiles.qobuzSearch(listOfNotNull(m.entry.artist, m.entry.title).joinToString(" "))))
+                    }.padding(start = 10.dp, top = 6.dp, bottom = 6.dp))
                 }
                 Hairline()
             }

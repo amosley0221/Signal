@@ -34,6 +34,8 @@ sealed interface Screen {
     data object Search : Screen
     data object PhoneFolders : Screen
     data object Settings : Screen
+    /** The Qobuz store in a browser inside Signal; purchases download straight into the library. */
+    data class Store(val url: String = com.amosley.signal.core.StoreFiles.QOBUZ_HOME) : Screen
 
     companion object {
         const val NEEDS_ARTIST = "smart:needs-artist"
