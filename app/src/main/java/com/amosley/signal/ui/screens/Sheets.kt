@@ -654,6 +654,15 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
                     groupRooms.forEach { r -> RoomVolume(c, r) }
                     Spacer(Modifier.height(6.dp))
                 }
+                var showTone by remember { mutableStateOf(false) }
+                Row(Modifier.fillMaxWidth().clickable { showTone = !showTone }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Mono("Bass & treble", color = C.Muted, modifier = Modifier.weight(1f))
+                    Mono(if (showTone) "Hide" else "Show", color = C.AmberText)
+                }
+                if (showTone) {
+                    groupRooms.forEach { r -> RoomTone(c, r, showName = groupRooms.size > 1) }
+                    Spacer(Modifier.height(10.dp))
+                }
                 LaunchedEffect(c.st.sonosGroup.size) {
                     app.hub.setGroupExtra(c.st.sonosGroup.size)
                     // The group's volume is the average of its rooms: re-read it after grouping changes.
@@ -829,5 +838,53 @@ private fun ColumnScope.EqSheet(c: Ctx) {
         }
         Spacer(Modifier.height(10.dp))
         Text("Boosting a band also lowers the overall level a little so loud songs don't distort.", style = T.ui(12.5.sp), color = C.Faint)
+    }
+}
+
+/** A Sonos room's own bass, treble and loudness (the same settings as the Sonos app's EQ for that room). */
+@Composable
+private fun RoomTone(c: Ctx, room: com.amosley.signal.cast.SonosRoom, showName: Boolean) {
+    val app = c.app
+    val scope = rememberCoroutineScope()
+    var tone by remember(room.uuid) { mutableStateOf<com.amosley.signal.cast.SonosTone?>(null) }
+    var failed by remember(room.uuid) { mutableStateOf(false) }
+    LaunchedEffect(room.uuid) {
+        val t = runCatching { app.sonos.tone(room) }.getOrNull()
+        if (t != null) tone = t else failed = true
+    }
+    Column(Modifier.padding(vertical = 4.dp)) {
+        if (showName) Text(room.name, style = T.ui(13.sp, 600), color = C.Fg)
+        val t = tone
+        if (t == null) {
+            Mono(if (failed) "Couldn't read ${room.name}'s sound settings" else "Loading…", style = T.metaMono, color = C.Faint, modifier = Modifier.padding(vertical = 6.dp))
+            return@Column
+        }
+        ToneLevel("Bass", t.bass, { tone = t.copy(bass = it) }) { v -> scope.safeLaunch { app.sonos.setBass(room, v) } }
+        ToneLevel("Treble", t.treble, { tone = t.copy(treble = it) }) { v -> scope.safeLaunch { app.sonos.setTreble(room, v) } }
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Loudness", style = T.ui(13.sp), color = C.Fg)
+                Text("Boosts bass and treble at low volume", style = T.ui(11.5.sp), color = C.Faint)
+            }
+            Toggle(t.loudness) { on -> tone = t.copy(loudness = on); scope.safeLaunch { app.sonos.setLoudness(room, on) } }
+            Spacer(Modifier.width(10.dp))
+            OutlineBtn("Reset") {
+                tone = com.amosley.signal.cast.SonosTone(0, 0, true)
+                scope.safeLaunch { app.sonos.setBass(room, 0); app.sonos.setTreble(room, 0); app.sonos.setLoudness(room, true) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToneLevel(label: String, value: Int, onChange: (Int) -> Unit, onDone: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Mono(label, style = T.metaMono, color = C.Muted, modifier = Modifier.width(56.dp))
+        Slider(
+            value = value.toFloat(), onValueChange = { onChange(it.roundToInt()) }, onValueChangeFinished = { onDone(value) },
+            valueRange = -10f..10f, steps = 19, modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(thumbColor = C.Amber, activeTrackColor = C.HairStrong, inactiveTrackColor = C.HairStrong, activeTickColor = Color.Transparent, inactiveTickColor = Color.Transparent),
+        )
+        Mono((if (value > 0) "+" else "") + value, style = T.metaMono, color = if (value == 0) C.Faint else C.Fg, modifier = Modifier.width(36.dp).padding(start = 8.dp))
     }
 }

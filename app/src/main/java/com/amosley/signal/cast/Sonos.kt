@@ -378,11 +378,39 @@ class SonosController(private val context: Context, private val http: OkHttpClie
         return Regex("<CurrentVolume>(\\d+)</CurrentVolume>").find(xml)?.groupValues?.get(1)?.toIntOrNull()
     }
 
+    /** A room's own bass and treble (-10..10) and loudness. Each speaker keeps its own, also when grouped. */
+    suspend fun tone(room: SonosRoom): SonosTone? {
+        val path = "/MediaRenderer/RenderingControl/Control"
+        val bass = soap(room, path, "RenderingControl", "GetBass", listOf("InstanceID" to "0"))
+        val treble = soap(room, path, "RenderingControl", "GetTreble", listOf("InstanceID" to "0"))
+        val loud = soap(room, path, "RenderingControl", "GetLoudness", listOf("InstanceID" to "0", "Channel" to "Master"))
+        return SonosTone(
+            bass = Regex("<CurrentBass>(-?\\d+)</CurrentBass>").find(bass)?.groupValues?.get(1)?.toIntOrNull() ?: return null,
+            treble = Regex("<CurrentTreble>(-?\\d+)</CurrentTreble>").find(treble)?.groupValues?.get(1)?.toIntOrNull() ?: return null,
+            loudness = Regex("<CurrentLoudness>(\\d)</CurrentLoudness>").find(loud)?.groupValues?.get(1) == "1",
+        )
+    }
+
+    suspend fun setBass(room: SonosRoom, v: Int) {
+        soap(room, "/MediaRenderer/RenderingControl/Control", "RenderingControl", "SetBass", listOf("InstanceID" to "0", "DesiredBass" to v.coerceIn(-10, 10).toString()))
+    }
+
+    suspend fun setTreble(room: SonosRoom, v: Int) {
+        soap(room, "/MediaRenderer/RenderingControl/Control", "RenderingControl", "SetTreble", listOf("InstanceID" to "0", "DesiredTreble" to v.coerceIn(-10, 10).toString()))
+    }
+
+    suspend fun setLoudness(room: SonosRoom, on: Boolean) {
+        soap(room, "/MediaRenderer/RenderingControl/Control", "RenderingControl", "SetLoudness",
+            listOf("InstanceID" to "0", "Channel" to "Master", "DesiredLoudness" to if (on) "1" else "0"))
+    }
+
     suspend fun groupVolume(coordinator: SonosRoom): Int? {
         val xml = soap(coordinator, "/MediaRenderer/GroupRenderingControl/Control", "GroupRenderingControl", "GetGroupVolume", listOf("InstanceID" to "0"))
         return Regex("<CurrentVolume>(\\d+)</CurrentVolume>").find(xml)?.groupValues?.get(1)?.toIntOrNull()
     }
 }
+
+data class SonosTone(val bass: Int, val treble: Int, val loudness: Boolean)
 
 /** Plays on a Sonos room (the group coordinator); polls position once a second. */
 class SonosOutput(
