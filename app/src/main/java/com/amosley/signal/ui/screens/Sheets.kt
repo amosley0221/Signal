@@ -64,6 +64,8 @@ import androidx.compose.ui.unit.sp
 import com.amosley.signal.cast.SonosOutput
 import com.amosley.signal.core.ArtistSuggester
 import com.amosley.signal.core.ArtistSuggestion
+import com.amosley.signal.core.Eq
+import com.amosley.signal.core.EqSettings
 import com.amosley.signal.core.Fmt
 import com.amosley.signal.core.Origin
 import com.amosley.signal.data.DlState
@@ -78,6 +80,7 @@ import com.amosley.signal.ui.components.Mono
 import com.amosley.signal.ui.components.OutlineBtn
 import com.amosley.signal.ui.components.QualityBadge
 import com.amosley.signal.ui.components.Spinner
+import com.amosley.signal.ui.components.Toggle
 import com.amosley.signal.ui.theme.C
 import com.amosley.signal.ui.theme.T
 import kotlinx.coroutines.launch
@@ -136,6 +139,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.NewPlaylist -> NewPlaylistSheet(c, sheet.trackId)
                 is Sheet.Art -> ArtSheet(c, sheet.album, sheet.artist)
                 is Sheet.FixMatch -> FixMatchSheet(c, sheet.movieId, sheet.showKey)
+                is Sheet.Equalizer -> EqSheet(c)
                 is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit
             }
         }
@@ -759,5 +763,71 @@ private fun RoomVolume(c: Ctx, room: com.amosley.signal.cast.SonosRoom) {
             colors = SliderDefaults.colors(thumbColor = C.Fg, activeTrackColor = C.Fg.copy(alpha = 0.7f), inactiveTrackColor = C.HairStrong),
         )
         Mono(v?.toString() ?: "–", color = C.Muted, modifier = Modifier.width(34.dp).padding(start = 8.dp))
+    }
+}
+
+// ---- Equalizer ----------------------------------------------------------------------------------
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ColumnScope.EqSheet(c: Ctx) {
+    val saved by c.repo.settings.collectAsState()
+    val on = saved.eq.enabled
+    var gains by remember { mutableStateOf(saved.eq.gains.takeIf { it.size == Eq.FREQS.size } ?: List(Eq.FREQS.size) { 0f }) }
+    fun save(g: List<Float> = gains, enabled: Boolean = on) = c.repo.updateSettings { it.copy(eq = EqSettings(enabled, g)) }
+    val preset = Eq.presetOf(gains)
+    val note = if (c.player.output != null) "Playing on ${c.player.output}: the equalizer only changes music played on this phone"
+    else "Music played on this phone · speaker, headphones and Bluetooth"
+    SheetHeader("Equalizer", note, "Done", { c.st.sheet = null })
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Equalizer", style = T.row, color = C.Fg)
+                Mono(if (on) preset ?: "Custom" else "Off", style = T.metaMono, color = if (on) C.AmberText else C.Faint)
+            }
+            Toggle(on) { save(enabled = it) }
+        }
+        Hairline()
+        Spacer(Modifier.height(14.dp))
+        Mono("Presets", color = C.Muted)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Eq.PRESETS.forEach { (name, g) ->
+                val picked = on && name == preset
+                Box(
+                    Modifier.height(30.dp).background(if (picked) C.Amber else Color.Transparent).border(1.dp, if (picked) C.Amber else C.HairStrong)
+                        .clickable { gains = g; save(g, enabled = true) }.padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(name.uppercase(), style = T.mono(10.5.sp, 600, 0.08.sp), color = if (picked) C.OnAmber else C.Fg, maxLines = 1) }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Mono("Bands · dB", color = C.Muted)
+        Spacer(Modifier.height(4.dp))
+        Eq.FREQS.forEachIndexed { i, hz ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Mono(if (hz >= 1000f) "${(hz / 1000f).roundToInt()} kHz" else "${hz.roundToInt()} Hz", style = T.metaMono, color = C.Muted, modifier = Modifier.width(56.dp))
+                Slider(
+                    value = gains[i],
+                    onValueChange = { v ->
+                        gains = gains.toMutableList().also { it[i] = (v * 2).roundToInt() / 2f }
+                        c.app.hub.previewEq(EqSettings(true, gains))
+                    },
+                    onValueChangeFinished = { save(enabled = true) },
+                    valueRange = -Eq.MAX_DB..Eq.MAX_DB, modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = if (on) C.Amber else C.Muted, activeTrackColor = C.HairStrong, inactiveTrackColor = C.HairStrong,
+                    ),
+                )
+                val g = gains[i]
+                Mono((if (g > 0) "+" else "") + "%.1f".format(g), style = T.metaMono, color = if (g == 0f) C.Faint else C.Fg, modifier = Modifier.width(44.dp).padding(start = 8.dp))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlineBtn("Reset to flat") { val flat = List(Eq.FREQS.size) { 0f }; gains = flat; save(flat) }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("Boosting a band also lowers the overall level a little so loud songs don't distort.", style = T.ui(12.5.sp), color = C.Faint)
     }
 }

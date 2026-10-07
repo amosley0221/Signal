@@ -57,6 +57,8 @@ data class Settings(
     val duplicates: com.amosley.signal.core.DuplicateMode = com.amosley.signal.core.DuplicateMode.PHONE,
     /** Chosen sort for each library tab. */
     val sorts: Map<com.amosley.signal.core.SortTab, com.amosley.signal.core.SortPref> = emptyMap(),
+    /** Equalizer for music played on the phone. */
+    val eq: com.amosley.signal.core.EqSettings = com.amosley.signal.core.EqSettings(),
 )
 
 enum class PhoneFolderType(val label: String) {

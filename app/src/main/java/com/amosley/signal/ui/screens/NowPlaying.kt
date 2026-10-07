@@ -154,6 +154,8 @@ fun NowPlayingContent(c: Ctx, pane: Boolean) {
                         Text((c.player.output ?: "Cast").uppercase(), style = T.mono(10.sp, 600, 0.08.sp), color = if (casting) C.OnAmber else C.Fg, maxLines = 1)
                     }
                 }
+                val eqOn = c.repo.settings.collectAsState().value.eq.enabled
+                HeaderToggle("EQ", eqOn, { c.st.sheet = Sheet.Equalizer })
                 HeaderToggle("Edit", false, { c.st.sheet = Sheet.Edit(t.id) })
             }
         }

@@ -23,6 +23,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -106,8 +108,18 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     @Volatile var streamingFromPc = false
         private set
 
+    /** Equalizer on the phone's own playback (Sonos and Cast play the file themselves, so it doesn't reach them). */
+    private val eqEngine = EqEngine()
+
+    /** Applies [s] right away without saving it (while a slider is being dragged). */
+    fun previewEq(s: com.amosley.signal.core.EqSettings) = eqEngine.apply(exo.audioSessionId, s)
+
     init {
+        scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            repo.settings.map { it.eq }.distinctUntilChanged().collect { eqEngine.apply(exo.audioSessionId, it) }
+        }
         exo.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) = eqEngine.apply(audioSessionId, repo.settings.value.eq)
             override fun onEvents(player: Player, events: Player.Events) = publish()
             override fun onPlayerError(error: PlaybackException) {
                 _ui.update { it.copy(error = error.message) }

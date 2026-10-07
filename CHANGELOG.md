@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.46] - 2026-10-07
+
+- **Equalizer.** Tap **EQ** at the top of Now Playing for a 10-band equalizer (31 Hz to 16 kHz, ±12 dB) with presets: Bass Boost, Bass Reducer, Treble Boost, Vocal, Hip-Hop, R&B, Pop, Rock, Electronic, Jazz, Classical, Acoustic and Late Night. You can also drag the bands to make your own curve. It applies to music played on the phone, including headphones, AirPods and car Bluetooth, and is remembered between sessions. Sonos and Cast play the file themselves, so the EQ doesn't reach them.
+
 ## [1.0.45] - 2026-10-02
 
 - **Sonos: songs that are on the phone always play.** If a Sonos speaker can't fetch a song from the PC, Signal now sends it the copy downloaded on the phone instead, rather than giving up with "couldn't load". Once that happens, later songs go straight to the phone copy.

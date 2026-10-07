@@ -53,6 +53,7 @@ sealed interface Sheet {
     data class AddTo(val trackId: String) : Sheet
     data class NewPlaylist(val trackId: String? = null) : Sheet
     data class LyricsEditor(val trackId: String) : Sheet
+    data object Equalizer : Sheet
     /** Pick or generate art for an album (key) or an artist (name). */
     data class Art(val album: String?, val artist: String?) : Sheet
     /** Search online details for a phone movie (movieId) or phone show (showKey = its id). */

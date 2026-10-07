@@ -219,3 +219,23 @@ class LanUrlTest {
         assertNull(LanUrl.refreshed("http://tone-pc2:8765", pc, "192.168.1.50")) // a name, not an address
     }
 }
+
+class EqTest {
+    @Test fun presetsCoverEveryBandAndAreRecognised() {
+        Eq.PRESETS.forEach { (name, g) ->
+            assertEquals(name, Eq.FREQS.size, g.size)
+            assertEquals(name, Eq.presetOf(g))
+        }
+        assertNull(Eq.presetOf(List(Eq.FREQS.size) { 1f }))
+    }
+
+    @Test fun curveFollowsTheBands() {
+        val g = listOf(6f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -6f)
+        assertEquals(6f, Eq.gainAt(g, 20f), 0.01f)
+        assertEquals(6f, Eq.gainAt(g, 31f), 0.01f)
+        assertEquals(3f, Eq.gainAt(g, kotlin.math.sqrt(31f * 62f)), 0.05f)
+        assertEquals(-6f, Eq.gainAt(g, 18000f), 0.01f)
+        assertEquals(-6f, Eq.preamp(g), 0.01f)
+        assertEquals(0f, Eq.preamp(listOf(-3f, -1f)), 0.01f)
+    }
+}
