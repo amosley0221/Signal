@@ -106,6 +106,29 @@ fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = fa
                     settings.domStorageEnabled = true
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
+                    // Buy buttons and checkout open new windows/popups: allow them and show them right here.
+                    settings.javaScriptCanOpenWindowsAutomatically = true
+                    settings.setSupportMultipleWindows(true)
+                    val main = this
+                    webChromeClient = object : android.webkit.WebChromeClient() {
+                        override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message): Boolean {
+                            // A throwaway view catches the new window's address, then the main view opens it.
+                            val child = WebView(ctx)
+                            child.webViewClient = object : WebViewClient() {
+                                private fun take(u: String?): Boolean {
+                                    if (u.isNullOrBlank() || u == "about:blank") return false
+                                    main.loadUrl(u)
+                                    child.post { child.destroy() }
+                                    return true
+                                }
+                                override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest) = take(request.url.toString())
+                                override fun onPageStarted(v: WebView, u: String?, favicon: android.graphics.Bitmap?) { take(u) }
+                            }
+                            (resultMsg.obj as WebView.WebViewTransport).webView = child
+                            resultMsg.sendToTarget()
+                            return true
+                        }
+                    }
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     webViewClient = object : WebViewClient() {
