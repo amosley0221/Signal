@@ -194,7 +194,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     private fun item(t: Track): MediaItem? {
         val uri = repo.playUri(t.id, t.origin, t.uri) ?: return null
         val art: Uri? = when {
-            t.origin == Origin.PC -> repo.artUrl(t.id)?.let(Uri::parse)
+            t.origin == Origin.PC -> (repo.albumArtFile(t.albumKey) ?: repo.savedCover(t.albumKey))?.let(Uri::fromFile) ?: repo.artUrl(t.id)?.let(Uri::parse)
             else -> null
         }
         return MediaItem.Builder()

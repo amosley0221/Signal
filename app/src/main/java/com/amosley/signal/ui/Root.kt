@@ -84,9 +84,9 @@ class Ctx(
     val pcName: String get() = settings.pc?.name ?: "PC"
 
     /** Song art: custom album art first, then the file's own cover. */
-    fun art(t: Track): Any? = repo.albumArtFile(t.albumKey) ?: fileArt(t)
+    fun art(t: Track): Any? = repo.albumArtFile(t.albumKey) ?: repo.savedCover(t.albumKey) ?: fileArt(t)
 
-    fun albumArt(a: com.amosley.signal.core.Album): Any? = repo.albumArtFile(a.key) ?: a.artTrack?.let { fileArt(it) }
+    fun albumArt(a: com.amosley.signal.core.Album): Any? = repo.albumArtFile(a.key) ?: repo.savedCover(a.key) ?: a.artTrack?.let { fileArt(it) }
 
     /** Artist picture: one you set or generated, else the art of one of their songs. */
     fun artistArt(name: String): Any? = repo.artistArtFile(name) ?: lib.artistTracks(name).firstOrNull()?.let { art(it) }

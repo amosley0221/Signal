@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.54] - 2026-10-08
+
+- **Album covers for downloaded music now show anywhere.** Covers for songs downloaded from the PC were still loaded from the PC. Away from home, or whenever the PC wasn't reachable, albums you hadn't opened before showed a plain color block. Signal now saves a copy of each downloaded album's cover on the phone, read from the song file itself or fetched from the PC once. It does this in the background for everything already downloaded, and the media notification uses the saved cover too. Albums that have no cover at all (not in the file and no cover.jpg in the folder) still need one set with "Change album art".
+
 ## [1.0.53] - 2026-10-08
 
 - **Fixed: some songs played with no sound.** Apple Lossless (ALAC) songs, the lossless .m4a files from iTunes and Apple Music such as My Beautiful Dark Twisted Fantasy, need a decoder the phone doesn't have. The player then ran through the song in silence. Signal now includes its own decoder (FFmpeg) for these and any other audio format the phone can't play. If a song still can't be played, Signal says so and skips it instead of playing silence.

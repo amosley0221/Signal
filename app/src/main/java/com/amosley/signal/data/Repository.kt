@@ -368,6 +368,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         autoRefresh = scope.launch {
             while (true) {
                 refreshNow(force = true)
+                saveDownloadedCovers()
                 // While the PC is still scanning, check every minute so new songs/episodes appear quickly.
                 val scanning = _remoteActivity.value.any { it.kind == "scan" && it.state.equals("running", true) }
                 // Couldn't reach the PC (busy, or Wi-Fi just changed): try again soon instead of in 10 minutes.
@@ -682,6 +683,58 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     fun albumArtFile(albumKey: String): File? = artFile("album", albumKey).takeIf { it.name in artNames }
+
+    /** A copy of a downloaded album's own cover kept on the phone, so it shows without the PC. */
+    fun savedCover(albumKey: String): File? = artFile("cover", albumKey).takeIf { it.name in artNames }
+
+    private var coverJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Saves the cover of every album with downloaded songs (once): from the song file itself when the cover is
+     * embedded, otherwise from the PC. Stored small (up to 800 px), so even a big library takes little space.
+     */
+    fun saveDownloadedCovers() {
+        if (coverJob?.isActive == true) return
+        coverJob = scope.launch(Dispatchers.IO) {
+            var saved = 0
+            for (album in library.value.albums) {
+                if (savedCover(album.key) != null || albumArtFile(album.key) != null) continue
+                val tracks = album.tracks.filter { it.origin == Origin.PC && downloads.isDownloaded(it.id) }
+                if (tracks.isEmpty()) continue
+                val bytes = tracks.firstNotNullOfOrNull { t -> downloads.fileFor(t.id)?.let(::embeddedPicture) }
+                    ?: album.artTrack?.takeIf { it.hasArt && _status.value.reachable }?.let { t ->
+                        artUrl(t.id)?.let { url ->
+                            runCatching {
+                                http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { r -> if (r.isSuccessful) r.body?.bytes() else null }
+                            }.getOrNull()
+                        }
+                    }
+                    ?: continue
+                val jpeg = shrink(bytes) ?: continue
+                val f = artFile("cover", album.key)
+                runCatching { f.writeBytes(jpeg); artNames += f.name; saved++ }
+                if (saved % 25 == 0) _artVersion.update { it + 1 }
+            }
+            if (saved > 0) _artVersion.update { it + 1 }
+        }
+    }
+
+    private fun embeddedPicture(file: File): ByteArray? = runCatching {
+        val r = android.media.MediaMetadataRetriever()
+        try { r.setDataSource(file.path); r.embeddedPicture } finally { r.release() }
+    }.getOrNull()
+
+    /** Image → JPEG no bigger than 800 px. */
+    private fun shrink(bytes: ByteArray): ByteArray? = runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= 800) sample *= 2
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return@runCatching null
+        val scaled = if (bmp.width > 800) android.graphics.Bitmap.createScaledBitmap(bmp, 800, bmp.height * 800 / bmp.width, true) else bmp
+        java.io.ByteArrayOutputStream().use { out -> scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, out); out.toByteArray() }
+    }.getOrNull()
     fun artistArtFile(name: String): File? = artFile("artist", name).takeIf { it.name in artNames }
 
     /** Save album art on the phone and, for PC albums, as cover.jpg in the album folder on the PC. */
