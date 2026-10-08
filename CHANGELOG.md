@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.51] - 2026-10-08
+
+- **Autoplay (like Apple Music's ∞).** When an album, playlist or your queue is about to end, Signal adds similar songs from your library and keeps playing until you stop it. It picks by what you've been listening to: the same artist, artists who appear on songs with them (features), similar genres and a similar era. Recent songs count most, so it follows along as the mood changes. It doesn't repeat songs you've just heard, plays at most two songs by one artist in each batch of ten, and never plays the same artist twice in a row. The queue shows these songs under "∞ Autoplay". Turn it on or off with **∞ Autoplay** in the queue or under Settings → Playback. It's on by default.
+
 ## [1.0.50] - 2026-10-08
 
 - **Store has its own tab.** The Qobuz store moved from Playlists to a new **Store** tab in Music, to the right of Music Videos. The store fills the area under the tabs. Signal remembers the page you were on when you switch to another tab and come back.

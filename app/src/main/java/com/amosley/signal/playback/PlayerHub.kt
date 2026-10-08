@@ -40,6 +40,8 @@ data class PlayerUi(
     val output: String? = null,
     val outputKind: OutputKind = OutputKind.PHONE,
     val error: String? = null,
+    /** Index in [upNext] where songs added by Autoplay begin (-1: none). */
+    val autoplayStart: Int = -1,
 )
 
 /** Volume change per press of the phone's volume buttons while playing on a speaker (0–100 scale). */
@@ -126,6 +128,8 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
                 onToast("Can't play this — ${error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ')}")
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                mediaItem?.mediaId?.let { id -> played.remove(id); played.addLast(id); while (played.size > 200) played.removeFirst() }
+                topUpAutoplay()
                 if (remote != null && mediaItem != null && reason != Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
                     sendCurrentToRemote(play = true, startMs = 0)
                 }
@@ -159,6 +163,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         val ids = (0 until exo.mediaItemCount).map { exo.getMediaItemAt(it).mediaId }
         val current = ids.getOrNull(idx)?.let { tracks[it] }
         val upNext = if (idx >= 0) ids.drop(idx + 1).mapNotNull { tracks[it] } else emptyList()
+        val autoplayStart = upNext.indexOfFirst { it.id in autoplayIds }
         _ui.update {
             it.copy(
                 current = current,
@@ -167,6 +172,7 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
                 positionMs = if (remote != null) it.positionMs else exo.currentPosition.coerceAtLeast(0),
                 durationMs = if (remote != null) it.durationMs else durationOf(exo),
                 upNext = upNext,
+                autoplayStart = autoplayStart,
             )
         }
     }
@@ -212,8 +218,10 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         unshuffled = if (shuffle) playable.dropWhile { it.id != start.id }.drop(1).map { it.id } else rest.map { it.id }
         _ui.update { it.copy(shuffle = shuffle, error = null) }
         val items = ordered.mapNotNull(::item)
+        autoplayIds.clear()
         exo.setMediaItems(items, 0, 0)
         exo.prepare()
+        topUpAutoplay()
         if (remote != null) sendCurrentToRemote(play = true, startMs = 0) else exo.play()
         connectSession()
     }
@@ -239,6 +247,50 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         exo.addMediaItem(mi)
         unshuffled = unshuffled + t.id
         onToast("Added to queue · ${t.title}")
+    }
+
+    // ---- Autoplay --------------------------------------------------------------------------------
+
+    /** Recently played song ids, oldest first (Autoplay's idea of what you're listening to; never repeated soon). */
+    private val played = ArrayDeque<String>()
+    /** Songs Autoplay added to the queue. */
+    private val autoplayIds = HashSet<String>()
+    private var autoplayJob: Job? = null
+
+    /** When two or fewer songs are left, add ten more like what's been playing. */
+    fun topUpAutoplay() {
+        if (!repo.settings.value.autoplay || autoplayJob?.isActive == true) return
+        val idx = exo.currentMediaItemIndex
+        if (idx < 0 || exo.mediaItemCount - idx - 1 > 2) return
+        val queued = (0 until exo.mediaItemCount).map { exo.getMediaItemAt(it).mediaId }
+        val seeds = (played.toList() - queued.toSet() + queued.take(idx + 1)).takeLast(25).mapNotNull { tracks[it] } +
+            queued.drop(idx + 1).mapNotNull { tracks[it] }
+        val exclude = queued.toSet() + played
+        val library = repo.library.value.tracks
+        val favorites = repo.favorites.value
+        autoplayJob = scope.launch {
+            val picks = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                com.amosley.signal.core.Autoplay.pick(seeds, library.filter { repo.isAvailable(it.id, it.origin) }, exclude, favorites)
+            }
+            if (!repo.settings.value.autoplay || exo.mediaItemCount == 0) return@launch
+            val items = picks.mapNotNull { t -> item(t)?.also { tracks[t.id] = t } }
+            if (items.isEmpty()) return@launch
+            autoplayIds += picks.map { it.id }
+            exo.addMediaItems(items)
+            unshuffled = unshuffled + picks.map { it.id }
+            publish()
+        }
+    }
+
+    /** Turning Autoplay off removes the songs it queued but hasn't played yet. */
+    fun setAutoplay(on: Boolean) {
+        repo.updateSettings { it.copy(autoplay = on) }
+        if (on) { topUpAutoplay(); return }
+        autoplayJob?.cancel()
+        for (i in exo.mediaItemCount - 1 downTo exo.currentMediaItemIndex + 1) {
+            if (exo.getMediaItemAt(i).mediaId in autoplayIds) exo.removeMediaItem(i)
+        }
+        autoplayIds.clear()
     }
 
     /** [index] is relative to the up-next list. */

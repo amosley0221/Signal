@@ -59,6 +59,8 @@ data class Settings(
     val sorts: Map<com.amosley.signal.core.SortTab, com.amosley.signal.core.SortPref> = emptyMap(),
     /** Equalizer for music played on the phone. */
     val eq: com.amosley.signal.core.EqSettings = com.amosley.signal.core.EqSettings(),
+    /** When the queue runs out, keep playing similar songs from the library (like Apple Music's ∞). */
+    val autoplay: Boolean = true,
 )
 
 enum class PhoneFolderType(val label: String) {

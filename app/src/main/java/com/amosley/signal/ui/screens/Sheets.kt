@@ -486,6 +486,12 @@ private fun ColumnScope.QueueSheet(c: Ctx) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlineBtn("Shuffle", color = if (c.player.shuffle) C.OnAmber else C.Fg, border = if (c.player.shuffle) C.Amber else C.HairStrong,
                 modifier = Modifier.background(if (c.player.shuffle) C.Amber else Color.Transparent)) { c.hub.setShuffle(!c.player.shuffle) }
+            val auto = c.settings.autoplay
+            OutlineBtn("∞ Autoplay", color = if (auto) C.OnAmber else C.Fg, border = if (auto) C.Amber else C.HairStrong,
+                modifier = Modifier.background(if (auto) C.Amber else Color.Transparent)) {
+                c.hub.setAutoplay(!auto)
+                c.toast(if (!auto) "Autoplay on · similar songs keep playing when the queue ends" else "Autoplay off")
+            }
             OutlineBtn("Clear") { c.hub.clearQueue() }
         }
     }
@@ -502,7 +508,7 @@ private fun ColumnScope.QueueSheet(c: Ctx) {
         Spacer(Modifier.height(10.dp))
     }
     if (next.isEmpty()) {
-        Mono("Queue is empty · use ⋯ on any song → Play next", color = C.Faint, modifier = Modifier.padding(vertical = 24.dp))
+        Mono(if (c.settings.autoplay) "Autoplay will pick similar songs next" else "Queue is empty · use ⋯ on any song → Play next", color = C.Faint, modifier = Modifier.padding(vertical = 24.dp))
         return
     }
     var dragging by remember { mutableIntStateOf(-1) }
@@ -510,6 +516,11 @@ private fun ColumnScope.QueueSheet(c: Ctx) {
     val rowPx = with(androidx.compose.ui.platform.LocalDensity.current) { 60.dp.toPx() }
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         next.forEachIndexed { i, t ->
+            if (i == c.player.autoplayStart) {
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Mono("∞ Autoplay · similar to what you're playing", color = C.AmberText, modifier = Modifier.weight(1f))
+                }
+            }
             val isDragged = dragging == i
             Row(
                 Modifier.fillMaxWidth().height(60.dp)

@@ -131,6 +131,12 @@ fun SettingsScreen(c: Ctx) {
                     ) { OutlineBtn("Fix", color = C.AmberText, border = C.Amber) { c.st.sheet = Sheet.Batch } }
                 }
                 Spacer(Modifier.height(22.dp))
+                Mono("Playback", color = C.Muted)
+                SettingRow(
+                    "Autoplay",
+                    "When your album, playlist or queue ends, keep playing similar songs from your library: the same and related artists, similar genres and era. Turn it off or on from the queue too.",
+                ) { Toggle(c.settings.autoplay) { v -> c.hub.setAutoplay(v) } }
+                Spacer(Modifier.height(22.dp))
                 Mono("Lyrics", color = C.Muted)
                 SettingRow(
                     "Find lyrics online",
