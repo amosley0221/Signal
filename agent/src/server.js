@@ -13,6 +13,7 @@ import { isLosslessCodec } from './media.js';
 import { adminPage } from './admin.js';
 import { validateSetup, saveSetup } from './config.js';
 import { Plex } from './plex.js';
+import { PlexImages, IMAGE_WIDTHS } from './images.js';
 import { listFolders } from './desktop.js';
 
 const MAX_JSON = 1024 * 1024;
@@ -197,6 +198,7 @@ export function createServer(agent) {
   route('GET', '/api/download/:id', downloadHandler);
   route('HEAD', '/api/download/:id', downloadHandler);
 
+  let plexImages = null;
   route('GET', '/api/art/:id', async (req, res, p, q) => {
     const a = await agent.catalog.art(p.id, q.get('kind') || 'cover');
     if (!a) return notFound(req, res);
@@ -208,7 +210,11 @@ export function createServer(agent) {
     }
     if (a.plex) {
       try {
-        return await agent.plex.proxyImage(a.plex, res);
+        if (!plexImages || plexImages.plex !== agent.plex) plexImages = new PlexImages(agent.plex, path.join(agent.config.dataDir, 'plex-images'));
+        const img = await plexImages.get(a.plex, IMAGE_WIDTHS[q.get('kind') || 'cover'] || 0);
+        // Plex picture paths change when the picture does, so a fetched one never goes stale.
+        res.writeHead(200, { 'Content-Type': img.mime, 'Content-Length': img.data.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+        return res.end(img.data);
       } catch {
         return notFound(req, res);
       }

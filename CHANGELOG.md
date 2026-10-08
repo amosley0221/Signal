@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.56] - 2026-10-09
+
+- **Movie and TV posters load reliably, even away from home.** The PC agent used to send every Plex poster at full size, often over 1 MB, and all at once while you scrolled. Over your home upload many timed out and stayed as plain color blocks. The agent now asks Plex for phone-sized posters (about 20 times smaller) and keeps a copy of each one so it's only fetched once. It also loads just a few at a time. Once a poster has loaded, the phone keeps it. **This fix is in the PC agent:** update Signal Agent on the PC to get it.
+
 ## [1.0.55] - 2026-10-08
 
 - **Signal remembers what was playing.** Your queue, the current song and where you were in it, plus Shuffle and Autoplay's picks, are saved as you listen. After an update, a restart, or Android closing the app, it all comes back paused at the same spot, so pressing Play carries on where you left off.
