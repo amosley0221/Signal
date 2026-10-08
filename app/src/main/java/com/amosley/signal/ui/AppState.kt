@@ -70,6 +70,8 @@ class AppState : ViewModel() {
     var storeUrl: String? = null
     /** Bumped to make the Store tab load [storeUrl] fresh (a "Find on Qobuz" link). */
     var storeNonce by mutableStateOf(0)
+    /** AirPods mode last picked in Signal (LibrePods doesn't report it to other apps). */
+    var airpodsMode by mutableStateOf<com.amosley.signal.playback.AirPodsControl.Mode?>(null)
     var movieTab by mutableStateOf(VideoTab.RECOMMENDED)
     var tvTab by mutableStateOf(VideoTab.RECOMMENDED)
     /** Genre picked under Categories (null = show the list of genres). */

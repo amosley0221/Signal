@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -211,6 +212,47 @@ fun NowPlayingContent(c: Ctx, pane: Boolean) {
             Spacer(Modifier.weight(1f))
             Box(Modifier.width(60.dp), contentAlignment = Alignment.CenterEnd) {
                 Mono("Queue", color = C.Muted, modifier = Modifier.clickable { c.st.sheet = Sheet.Queue })
+            }
+        }
+        AirPodsModes(c)
+    }
+}
+
+/** Listening mode buttons while Bluetooth headphones are connected and LibrePods is installed. */
+@Composable
+private fun AirPodsModes(c: Ctx) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val installed = remember { com.amosley.signal.playback.AirPodsControl.installed(context) }
+    if (!installed) return
+    var phones by remember { mutableStateOf(com.amosley.signal.playback.AirPodsControl.headphones(context)) }
+    DisposableEffect(Unit) {
+        val am = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val cb = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) { phones = com.amosley.signal.playback.AirPodsControl.headphones(context) }
+            override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>?) { phones = com.amosley.signal.playback.AirPodsControl.headphones(context) }
+        }
+        am.registerAudioDeviceCallback(cb, null)
+        onDispose { am.unregisterAudioDeviceCallback(cb) }
+    }
+    val name = phones ?: return
+    if (c.player.output != null) return
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Mono(name, style = T.metaMono, color = C.Faint)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.amosley.signal.playback.AirPodsControl.Mode.entries.forEach { m ->
+                val on = c.st.airpodsMode == m
+                Box(
+                    Modifier.weight(1f).height(34.dp).background(if (on) C.Amber else Color.Transparent).border(1.dp, if (on) C.Amber else C.HairStrong)
+                        .clickable {
+                            com.amosley.signal.playback.AirPodsControl.setMode(context, m)
+                            c.st.airpodsMode = m
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(if (m == com.amosley.signal.playback.AirPodsControl.Mode.NOISE_CANCELLATION) "Noise Cancel" else m.label,
+                        style = T.mono(10.sp, 600, 0.04.sp), color = if (on) C.OnAmber else C.Fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

@@ -20,6 +20,11 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- LibrePods (AirPods listening mode): to see that it's installed. -->
+    <queries>
+        <package android:name="me.kavishdevar.librepods" />
+    </queries>
+
     <application
         android:name=".SignalApp"
         android:allowBackup="true"

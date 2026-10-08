@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.52] - 2026-10-08
+
+- **AirPods listening mode in Now Playing.** With LibrePods installed and AirPods connected, Now Playing shows **Off · Transparency · Adaptive · Noise Cancel** under the play controls. Tap one to switch modes without leaving Signal. Signal asks LibrePods to make the change, so LibrePods must be installed and connected to your AirPods. The buttons hide when no headphones are connected or when you're playing on Sonos or a TV.
+
 ## [1.0.51] - 2026-10-08
 
 - **Autoplay (like Apple Music's ∞).** When an album, playlist or your queue is about to end, Signal adds similar songs from your library and keeps playing until you stop it. It picks by what you've been listening to: the same artist, artists who appear on songs with them (features), similar genres and a similar era. Recent songs count most, so it follows along as the mood changes. It doesn't repeat songs you've just heard, plays at most two songs by one artist in each batch of ten, and never plays the same artist twice in a row. The queue shows these songs under "∞ Autoplay". Turn it on or off with **∞ Autoplay** in the queue or under Settings → Playback. It's on by default.
