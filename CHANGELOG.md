@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.58] - 2026-10-09
+
+- Lyrics no longer show a "Lyrics from LRCLIB" label above them.
+
 ## [1.0.57] - 2026-10-09
 
 - **The current lyric line stays in the middle.** It used to sit near the bottom, so long lines (and their translation) could be cut off by the progress bar. The line being sung is now centered, however many lines it wraps to.

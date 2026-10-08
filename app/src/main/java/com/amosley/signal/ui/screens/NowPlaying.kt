@@ -372,7 +372,7 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Mono(
                 listOfNotNull(
-                    when (lyrics.source) { "lrclib" -> "Lyrics from LRCLIB"; "user" -> "Your lyrics"; else -> null },
+                    if (lyrics.source == "user") "Your lyrics" else null,
                     if (!lyrics.synced) "Not time-synced" else null,
                 ).joinToString(" · "),
                 style = T.metaMono, color = C.Faint, modifier = Modifier.weight(1f),
