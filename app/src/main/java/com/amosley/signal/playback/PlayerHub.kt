@@ -71,6 +71,18 @@ data class RemoteItem(val url: String, val title: String, val artist: String?, v
     /** The same song served from the phone, tried when the speaker can't fetch [url] from the PC. */
     val fallback: RemoteItem? = null,
 )
+/** What was playing, saved so it comes back after the app is closed or updated. */
+@kotlinx.serialization.Serializable
+data class SavedQueue(
+    val tracks: List<Track> = emptyList(),
+    val index: Int = 0,
+    val positionMs: Long = 0,
+    val shuffle: Boolean = false,
+    val unshuffled: List<String> = emptyList(),
+    val autoplay: List<String> = emptyList(),
+    val played: List<String> = emptyList(),
+)
+
 data class RemoteState(val positionMs: Long = 0, val durationMs: Long = 0, val playing: Boolean = false, val ended: Boolean = false, val error: String? = null)
 
 /**
@@ -121,13 +133,57 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
     /** Applies [s] right away without saving it (while a slider is being dragged). */
     fun previewEq(s: com.amosley.signal.core.EqSettings) = eqEngine.apply(exo.audioSessionId, s)
 
+    private val queueStore = com.amosley.signal.data.JsonStore(java.io.File(context.filesDir, "queue.json"), SavedQueue.serializer()) { SavedQueue() }
+    /** Something changed that should be saved (the queue, the song, play/pause). */
+    @Volatile private var queueDirty = false
+    private var lastQueueSave = 0L
+
+    private fun saveQueue() {
+        queueDirty = false
+        lastQueueSave = System.currentTimeMillis()
+        val n = exo.mediaItemCount
+        val ids = (0 until n).map { exo.getMediaItemAt(it).mediaId }
+        val state = SavedQueue(
+            tracks = ids.mapNotNull { tracks[it] },
+            index = exo.currentMediaItemIndex.coerceAtLeast(0),
+            positionMs = (if (remote != null) remote?.state?.value?.positionMs else exo.currentPosition)?.coerceAtLeast(0) ?: 0,
+            shuffle = _ui.value.shuffle,
+            unshuffled = unshuffled,
+            autoplay = autoplayIds.toList(),
+            played = played.toList(),
+        )
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { queueStore.save(state) }
+    }
+
+    /** Puts back what was playing last time, paused at the same spot (only if nothing else was started). */
+    private fun restoreQueue() {
+        val s = queueStore.load()
+        if (s.tracks.isEmpty() || exo.mediaItemCount > 0) return
+        val kept = s.tracks.filter { repo.isAvailable(it.id, it.origin) || it.origin == Origin.PC }
+        val items = kept.mapNotNull { t -> item(t)?.also { tracks[t.id] = t } }
+        if (items.isEmpty()) return
+        val current = s.tracks.getOrNull(s.index)?.id
+        val index = kept.indexOfFirst { it.id == current }.takeIf { it >= 0 && it < items.size } ?: 0
+        unshuffled = s.unshuffled
+        autoplayIds += s.autoplay
+        s.played.forEach { played.addLast(it) }
+        _ui.update { it.copy(shuffle = s.shuffle) }
+        exo.setMediaItems(items, index, if (index == kept.indexOfFirst { it.id == current }) s.positionMs else 0)
+        exo.prepare()
+        publish()
+    }
+
     init {
+        scope.launch(kotlinx.coroutines.Dispatchers.Main) { restoreQueue() }
         scope.launch(kotlinx.coroutines.Dispatchers.Main) {
             repo.settings.map { it.eq }.distinctUntilChanged().collect { eqEngine.apply(exo.audioSessionId, it) }
         }
         exo.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = eqEngine.apply(audioSessionId, repo.settings.value.eq)
-            override fun onEvents(player: Player, events: Player.Events) = publish()
+            override fun onEvents(player: Player, events: Player.Events) {
+                publish()
+                if (events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_POSITION_DISCONTINUITY)) queueDirty = true
+            }
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 // A song whose audio no decoder can play would otherwise run silently: say so instead.
                 val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
@@ -158,6 +214,9 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
                 if (remote == null) {
                     _ui.update { it.copy(positionMs = exo.currentPosition.coerceAtLeast(0), durationMs = durationOf(exo)) }
                 }
+                // Save right after changes, and every 10 s while playing so the spot in the song is kept.
+                val playing = _ui.value.playing
+                if (queueDirty || (playing && System.currentTimeMillis() - lastQueueSave > 10_000)) saveQueue()
             }
         }
     }
