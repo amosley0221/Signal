@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.57] - 2026-10-09
+
+- **The current lyric line stays in the middle.** It used to sit near the bottom, so long lines (and their translation) could be cut off by the progress bar. The line being sung is now centered, however many lines it wraps to.
+- **Lyrics are translated on the phone.** Translations used to appear only when an English .lrc file sat next to the song on the PC. Now lyrics in another language, including ones found online for phone songs, get an English line underneath, translated on the phone with Google's offline translator. The first song in a new language downloads that language's model once (about 30 MB). After that it works offline. Use the ES / ES + EN / EN switch above the lyrics to choose what shows.
+
 ## [1.0.56] - 2026-10-09
 
 - **Movie and TV posters load reliably, even away from home.** The PC agent used to send every Plex poster at full size, often over 1 MB, and all at once while you scrolled. Over your home upload many timed out and stayed as plain color blocks. The agent now asks Plex for phone-sized posters (about 20 times smaller) and keeps a copy of each one so it's only fetched once. It also loads just a few at a time. Once a poster has loaded, the phone keeps it. **This fix is in the PC agent:** update Signal Agent on the PC to get it.

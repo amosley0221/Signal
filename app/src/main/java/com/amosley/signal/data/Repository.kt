@@ -552,8 +552,32 @@ class Repository(val context: Context, val scope: CoroutineScope) {
         if (result != null) {
             _lyrics.update { it + (track.id to result) }
             if (result !== primary || track.origin == Origin.PC) runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), result)) }
+            translateLater(track, result, file)
         }
         result
+    }
+
+    private val translator = LyricsTranslator()
+    private val translating = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Foreign-language lyrics without an English version: translate them on the phone, then show both. */
+    private fun translateLater(track: Track, lyrics: Lyrics, file: File) {
+        if (!_settings.value.translateLyrics || lyrics.hasTranslation || lyrics.source == "user" || lyrics.lang == "en") return
+        if (!translating.add(track.id)) return
+        scope.launch(Dispatchers.IO) {
+            val attempt = runCatching { translator.translate(lyrics.lines, lyrics.lang) }
+            if (attempt.isFailure) {
+                // No connection for the language model yet, for example: try again next time the song plays.
+                android.util.Log.w("Signal", "lyrics translation failed", attempt.exceptionOrNull())
+                translating.remove(track.id)
+                return@launch
+            }
+            val done = attempt.getOrNull() ?: return@launch // already English, or a language it can't translate
+            val (lang, lines) = done
+            val translated = lyrics.copy(lang = lang, lines = lines)
+            if (_lyrics.value[track.id] === lyrics) _lyrics.update { it + (track.id to translated) }
+            runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), translated)) }
+        }
     }
 
     private suspend fun fetchOnline(track: Track): Lyrics? {

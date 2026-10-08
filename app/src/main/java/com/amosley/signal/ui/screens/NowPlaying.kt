@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -382,13 +383,18 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
         Spacer(Modifier.height(4.dp))
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val h = maxHeight
+            // Keep the current line in the middle, however many lines it wraps to (and its translation).
             LaunchedEffect(active, h) {
-                if (active >= 0) {
-                    val offset = with(density) { (h * 0.38f).roundToPx() }
-                    listState.animateScrollToItem(active, -offset)
+                if (active < 0) return@LaunchedEffect
+                fun centreDelta(): Float? {
+                    val info = listState.layoutInfo
+                    val item = info.visibleItemsInfo.firstOrNull { it.index == active } ?: return null
+                    return (item.offset + item.size / 2f) - (info.viewportStartOffset + info.viewportEndOffset) / 2f
                 }
+                if (centreDelta() == null) listState.scrollToItem(active)
+                centreDelta()?.let { listState.animateScrollBy(it) }
             }
-            LazyColumn(state = listState, contentPadding = PaddingValues(top = h * 0.38f, bottom = h * 0.6f), modifier = Modifier.fillMaxSize()) {
+            LazyColumn(state = listState, contentPadding = PaddingValues(top = h * 0.5f, bottom = h * 0.5f), modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(lyrics.lines, key = { i, _ -> "ly-$i" }) { i, line ->
                     val target = when {
                         !lyrics.synced -> 0.9f
