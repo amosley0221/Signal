@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.50] - 2026-10-08
+
+- **Store has its own tab.** The Qobuz store moved from Playlists to a new **Store** tab in Music, to the right of Music Videos. The store fills the area under the tabs. Signal remembers the page you were on when you switch to another tab and come back.
+- "More by … on Qobuz" on artist pages and the "Qobuz ›" links for songs a playlist import couldn't find now open in the Store tab.
+
 ## [1.0.49] - 2026-10-07
 
 - **Buy music on Qobuz from inside Signal.** In Music → Playlists, tap **Buy music on Qobuz** to open the Qobuz store in Signal. Sign in to your Qobuz account (use email and password, since Google sign-in doesn't work inside apps) and buy as usual. Payment goes straight to Qobuz. Signal never sees your card.

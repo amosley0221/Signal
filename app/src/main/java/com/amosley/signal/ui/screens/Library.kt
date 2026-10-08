@@ -126,6 +126,17 @@ fun LibraryPane(c: Ctx) {
     val section = if (c.unfolded && st.section == Section.SETTINGS) Section.MUSIC else st.section
     val listState = rememberLazyListState()
     val jump = remember { JumpIndex() }
+    // The store is a web page with its own scrolling: it fills the pane under the tabs instead of joining the list.
+    if (section == Section.MUSIC && st.tab == MusicTab.STORE) {
+        Column(Modifier.fillMaxSize()) {
+            LibraryHeader(c, section)
+            SubTabs(c)
+            androidx.compose.runtime.key(st.storeNonce) {
+                StoreBrowser(c, st.storeUrl ?: com.amosley.signal.core.StoreFiles.QOBUZ_HOME, Modifier.weight(1f), onPage = { st.storeUrl = it })
+            }
+        }
+        return
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // More columns when the pane is wide (unfolded, full width).
         val posterCols = (maxWidth / 150.dp).toInt().coerceIn(POSTER_COLS, 8)
@@ -134,31 +145,7 @@ fun LibraryPane(c: Ctx) {
             jump.reset()
             jump.posterCols = posterCols
             jump.albumCols = albumCols
-            counted(jump) {
-                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Box(Modifier.weight(1f)) {
-                            if (c.unfolded) SectionPicker(c, section) else Text(section.label, style = T.sectionTitle, color = C.Fg)
-                        }
-                        val newCount = importCandidates(c).size
-                        if (newCount > 0 && section == Section.MUSIC) {
-                            OutlineBtn("+$newCount new", color = C.AmberText, border = C.Amber) { st.sheet = Sheet.Import }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        SquareBtn(Icons.Filled.Search, size = 32.dp, desc = "Search") { st.push(Screen.Search) }
-                        if (c.unfolded) {
-                            Spacer(Modifier.width(8.dp))
-                            SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
-                        }
-                    }
-                    // PC status lives in Settings; here only a problem is shown (songs can't stream while the PC is unreachable).
-                val s = c.status
-                if (c.settings.pc != null && (c.settings.offline || (!s.reachable && !s.checking))) {
-                    Spacer(Modifier.height(8.dp))
-                    StatusLine(c)
-                }
-                }
-            }
+            counted(jump) { LibraryHeader(c, section) }
             when (section) {
                 Section.MUSIC -> {
                     counted(jump) { SubTabs(c) }
@@ -169,6 +156,7 @@ fun LibraryPane(c: Ctx) {
                         MusicTab.ARTISTS -> artists(c, jump)
                         MusicTab.PLAYLISTS -> playlists(c)
                         MusicTab.VIDEOS -> musicVideos(c)
+                        MusicTab.STORE -> Unit
                     }
                 }
                 Section.MOVIES -> {
@@ -200,6 +188,35 @@ fun LibraryPane(c: Ctx) {
             item { Spacer(Modifier.height(24.dp)) }
         }
         railMode(c, section)?.let { AlphaRail(listState, jump, it) }
+    }
+}
+
+/** Section title (or picker), the "+N new" button, search and settings. */
+@Composable
+private fun LibraryHeader(c: Ctx, section: Section) {
+    val st = c.st
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 14.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Box(Modifier.weight(1f)) {
+                if (c.unfolded) SectionPicker(c, section) else Text(section.label, style = T.sectionTitle, color = C.Fg)
+            }
+            val newCount = importCandidates(c).size
+            if (newCount > 0 && section == Section.MUSIC) {
+                OutlineBtn("+$newCount new", color = C.AmberText, border = C.Amber) { st.sheet = Sheet.Import }
+                Spacer(Modifier.width(8.dp))
+            }
+            SquareBtn(Icons.Filled.Search, size = 32.dp, desc = "Search") { st.push(Screen.Search) }
+            if (c.unfolded) {
+                Spacer(Modifier.width(8.dp))
+                SquareBtn(Icons.Filled.Settings, size = 32.dp, desc = "Settings") { st.push(Screen.Settings) }
+            }
+        }
+        // PC status lives in Settings; here only a problem is shown (songs can't stream while the PC is unreachable).
+        val s = c.status
+        if (c.settings.pc != null && (c.settings.offline || (!s.reachable && !s.checking))) {
+            Spacer(Modifier.height(8.dp))
+            StatusLine(c)
+        }
     }
 }
 
@@ -562,19 +579,6 @@ private fun LazyListScope.playlists(c: Ctx) {
             Icon(Icons.Filled.Add, null, tint = C.AmberText)
             Spacer(Modifier.width(10.dp))
             Text("Import from Apple Music", style = T.row)
-        }
-    }
-    item {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 6.dp).clickable { c.st.push(Screen.Store()) }
-                .drawBehind {
-                    drawRect(C.HairStrong, style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))))
-                }.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Add, null, tint = C.AmberText)
-            Spacer(Modifier.width(10.dp))
-            Text("Buy music on Qobuz", style = T.row)
         }
     }
     item {

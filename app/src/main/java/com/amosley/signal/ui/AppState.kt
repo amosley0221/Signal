@@ -11,7 +11,7 @@ import com.amosley.signal.core.Track
 enum class Section(val label: String) { MUSIC("Music"), MOVIES("Movies"), TV("TV Shows"), SETTINGS("Settings") }
 
 enum class MusicTab(val label: String) {
-    RECENT("Recently Added"), SONGS("Songs"), ALBUMS("Albums"), ARTISTS("Artists"), PLAYLISTS("Playlists"), VIDEOS("Music Videos")
+    RECENT("Recently Added"), SONGS("Songs"), ALBUMS("Albums"), ARTISTS("Artists"), PLAYLISTS("Playlists"), VIDEOS("Music Videos"), STORE("Store")
 }
 
 enum class VideoKind { MOVIE, EPISODE, MUSIC_VIDEO }
@@ -34,8 +34,6 @@ sealed interface Screen {
     data object Search : Screen
     data object PhoneFolders : Screen
     data object Settings : Screen
-    /** The Qobuz store in a browser inside Signal; purchases download straight into the library. */
-    data class Store(val url: String = com.amosley.signal.core.StoreFiles.QOBUZ_HOME) : Screen
 
     companion object {
         const val NEEDS_ARTIST = "smart:needs-artist"
@@ -68,6 +66,10 @@ sealed interface Sheet {
 class AppState : ViewModel() {
     var section by mutableStateOf(Section.MUSIC)
     var tab by mutableStateOf(MusicTab.RECENT)
+    /** The last page open in the Store tab, so switching tabs doesn't lose your place. */
+    var storeUrl: String? = null
+    /** Bumped to make the Store tab load [storeUrl] fresh (a "Find on Qobuz" link). */
+    var storeNonce by mutableStateOf(0)
     var movieTab by mutableStateOf(VideoTab.RECOMMENDED)
     var tvTab by mutableStateOf(VideoTab.RECOMMENDED)
     /** Genre picked under Categories (null = show the list of genres). */
@@ -92,6 +94,17 @@ class AppState : ViewModel() {
     var videoPositionMs by mutableStateOf(0L)
 
     val screen: Screen get() = stack.last()
+
+    /** Opens [url] in Music → Store, closing whatever page or sheet was on top. */
+    fun openStore(url: String) {
+        storeUrl = url
+        storeNonce++
+        sheet = null
+        nowPlayingPane = false
+        section = Section.MUSIC
+        tab = MusicTab.STORE
+        while (stack.size > 1) stack.removeAt(stack.lastIndex)
+    }
 
     fun push(s: Screen) {
         nowPlayingPane = false

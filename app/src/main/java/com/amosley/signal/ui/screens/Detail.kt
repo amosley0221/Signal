@@ -329,7 +329,7 @@ fun ArtistScreen(c: Ctx, name: String) {
                 onChangeArt = { c.st.sheet = Sheet.Art(album = null, artist = name) },
                 extra = {
                     Mono("More by $name on Qobuz ›", color = C.AmberText, style = T.metaMono,
-                        modifier = Modifier.clickable { c.st.push(Screen.Store(com.amosley.signal.core.StoreFiles.qobuzSearch(name))) }.padding(top = 14.dp, bottom = 4.dp))
+                        modifier = Modifier.clickable { c.st.openStore(com.amosley.signal.core.StoreFiles.qobuzSearch(name)) }.padding(top = 14.dp, bottom = 4.dp))
                 },
             )
         }

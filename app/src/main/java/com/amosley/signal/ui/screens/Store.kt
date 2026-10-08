@@ -54,9 +54,10 @@ import com.amosley.signal.ui.theme.T
  * The Qobuz store inside Signal. You sign in to your own Qobuz account and pay Qobuz on its own pages;
  * when a purchase is downloaded here, Signal saves it to Music/Signal and adds it to the library.
  */
+/** The store page plus its download list; used by the Store tab and by "Find on Qobuz" links. */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun StoreScreen(c: Ctx, url: String) {
+fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = false, onPage: (String) -> Unit = {}) {
     val app = c.app
     val context = LocalContext.current
     var web by remember { mutableStateOf<WebView?>(null) }
@@ -77,12 +78,14 @@ fun StoreScreen(c: Ctx, url: String) {
         app.store.fromFile(uri, name)
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).clickable { c.st.back() }, contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = C.Fg)
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = if (showBack) 12.dp else 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (showBack) {
+                Box(Modifier.size(36.dp).clickable { c.st.back() }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = C.Fg)
+                }
+                Spacer(Modifier.width(6.dp))
             }
-            Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
                 Text("Qobuz", style = T.ui(17.sp, 600), color = C.Fg)
                 Mono("Pay on Qobuz · downloads go to your library", style = T.metaMono, color = C.Faint)
@@ -114,7 +117,11 @@ fun StoreScreen(c: Ctx, url: String) {
                             return true
                         }
                         override fun onPageStarted(view: WebView, u: String?, favicon: android.graphics.Bitmap?) { loading = true }
-                        override fun onPageFinished(view: WebView, u: String?) { loading = false; canBack = view.canGoBack() }
+                        override fun onPageFinished(view: WebView, u: String?) {
+                            loading = false
+                            canBack = view.canGoBack()
+                            u?.let(onPage)
+                        }
                         override fun doUpdateVisitedHistory(view: WebView, u: String?, isReload: Boolean) { canBack = view.canGoBack() }
                     }
                     setDownloadListener { dlUrl, userAgent, contentDisposition, mimeType, _ ->
