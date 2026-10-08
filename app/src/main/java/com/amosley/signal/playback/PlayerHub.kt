@@ -79,7 +79,12 @@ data class RemoteState(val positionMs: Long = 0, val durationMs: Long = 0, val p
  * "Add to queue" appends; Previous restarts if more than 3 s in, otherwise goes back.
  */
 class PlayerHub(private val context: Context, private val repo: Repository, private val scope: CoroutineScope) {
-    val exo: ExoPlayer = ExoPlayer.Builder(context)
+    val exo: ExoPlayer = ExoPlayer.Builder(
+        context,
+        // The phone's own decoders first; FFmpeg for what it can't decode (Apple Lossless, …).
+        androidx.media3.exoplayer.DefaultRenderersFactory(context)
+            .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
+    )
         .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(context, OkHttpDataSource.Factory(repo.http))))
         .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
         .setHandleAudioBecomingNoisy(true)
@@ -123,6 +128,15 @@ class PlayerHub(private val context: Context, private val repo: Repository, priv
         exo.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) = eqEngine.apply(audioSessionId, repo.settings.value.eq)
             override fun onEvents(player: Player, events: Player.Events) = publish()
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                // A song whose audio no decoder can play would otherwise run silently: say so instead.
+                val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                if (audio.isNotEmpty() && audio.none { it.isSelected }) {
+                    val codec = audio.first().getTrackFormat(0).sampleMimeType?.substringAfter('/')?.uppercase() ?: "this format"
+                    onToast("This phone can't play $codec audio · skipping")
+                    if (exo.hasNextMediaItem()) exo.seekToNextMediaItem()
+                }
+            }
             override fun onPlayerError(error: PlaybackException) {
                 _ui.update { it.copy(error = error.message) }
                 onToast("Can't play this — ${error.errorCodeName.removePrefix("ERROR_CODE_").lowercase().replace('_', ' ')}")

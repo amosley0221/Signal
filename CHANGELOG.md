@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.53] - 2026-10-08
+
+- **Fixed: some songs played with no sound.** Apple Lossless (ALAC) songs, the lossless .m4a files from iTunes and Apple Music such as My Beautiful Dark Twisted Fantasy, need a decoder the phone doesn't have. The player then ran through the song in silence. Signal now includes its own decoder (FFmpeg) for these and any other audio format the phone can't play. If a song still can't be played, Signal says so and skips it instead of playing silence.
+
 ## [1.0.52] - 2026-10-08
 
 - **AirPods listening mode in Now Playing.** With LibrePods installed and AirPods connected, Now Playing shows **Off · Transparency · Adaptive · Noise Cancel** under the play controls. Tap one to switch modes without leaving Signal. Signal asks LibrePods to make the change, so LibrePods must be installed and connected to your AirPods. The buttons hide when no headphones are connected or when you're playing on Sonos or a TV.

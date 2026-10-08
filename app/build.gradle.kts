@@ -102,6 +102,10 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("androidx.media3:media3-cast:$media3")
+    // FFmpeg audio decoders (Jellyfin's build of the Media3 extension): plays formats the phone has no decoder for,
+    // e.g. Apple Lossless (ALAC) .m4a, which otherwise "plays" in silence.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
+    implementation("androidx.media3:media3-decoder:$media3")
     implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
     implementation("androidx.mediarouter:mediarouter:1.7.0")
 

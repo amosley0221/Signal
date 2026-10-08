@@ -9,3 +9,7 @@
 # Cast options provider is referenced from the manifest by name
 -keep class com.amosley.signal.cast.CastOptionsProvider { *; }
 -dontwarn org.slf4j.**
+
+# FFmpeg audio renderer is created by reflection (DefaultRenderersFactory, extension mode on).
+-keep class androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer { <init>(...); }
+-keep class androidx.media3.decoder.ffmpeg.FfmpegLibrary { *; }
