@@ -558,34 +558,48 @@ class Repository(val context: Context, val scope: CoroutineScope) {
     }
 
     private val translator = LyricsTranslator()
-    private val translating = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** Short messages for the user (set by the app). */
+    var onToast: (String) -> Unit = {}
+    private val _translating = MutableStateFlow<Set<String>>(emptySet())
+    /** Songs whose lyrics are being translated right now (the lyrics view says so). */
+    val translating: StateFlow<Set<String>> = _translating
 
     /** Foreign-language lyrics without an English version: translate them on the phone, then show both. */
-    private fun translateLater(track: Track, lyrics: Lyrics, file: File) {
-        if (!_settings.value.translateLyrics || lyrics.hasTranslation || lyrics.trChecked || lyrics.source == "user") return
-        if (!translating.add(track.id)) return
+    private fun translateLater(track: Track, lyrics: Lyrics, file: File, force: Boolean = false) {
+        if (!_settings.value.translateLyrics && !force) return
+        if (lyrics.hasTranslation || (lyrics.trChecked && !force) || lyrics.source == "user") return
+        if (track.id in _translating.value) return
+        _translating.update { it + track.id }
         scope.launch(Dispatchers.IO) {
-            val attempt = runCatching { translator.translate(lyrics.lines, lyrics.lang) }
-            if (attempt.isFailure) {
-                // No connection for the language model yet, for example: try again next time the song plays.
-                android.util.Log.w("Signal", "lyrics translation failed", attempt.exceptionOrNull())
-                translating.remove(track.id)
-                return@launch
+            try {
+                val attempt = runCatching { translator.translate(lyrics.lines, lyrics.lang) }
+                if (attempt.isFailure) {
+                    // No connection for the language model yet, for example: try again next time.
+                    android.util.Log.w("Signal", "lyrics translation failed", attempt.exceptionOrNull())
+                    if (force) onToast("Couldn't translate: ${attempt.exceptionOrNull()?.message ?: "no connection"}")
+                    return@launch
+                }
+                val done = attempt.getOrNull()
+                val updated = if (done == null) {
+                    // All English (or a language it can't translate): note it so it isn't checked again.
+                    if (force) onToast("Nothing to translate in these lyrics")
+                    lyrics.copy(trChecked = true)
+                } else {
+                    // A mostly-English song keeps "en" as its language; its foreign lines still carry translations.
+                    lyrics.copy(lang = if (lyrics.lang == "en") "en" else done.first, lines = done.second, trChecked = true)
+                }
+                _lyrics.update { m -> if (m[track.id]?.hasTranslation == true) m else m + (track.id to updated) }
+                runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), updated)) }
+            } finally {
+                _translating.update { it - track.id }
             }
-            val done = attempt.getOrNull()
-            if (done == null) {
-                // All English (or a language it can't translate): note it so it isn't checked again.
-                val checked = lyrics.copy(trChecked = true)
-                if (_lyrics.value[track.id] === lyrics) _lyrics.update { it + (track.id to checked) }
-                runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), checked)) }
-                return@launch
-            }
-            val (lang, lines) = done
-            // A mostly-English song keeps "en" as its language; its foreign lines still carry translations.
-            val translated = lyrics.copy(lang = if (lyrics.lang == "en") "en" else lang, lines = lines, trChecked = true)
-            if (_lyrics.value[track.id] === lyrics) _lyrics.update { it + (track.id to translated) }
-            runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), translated)) }
         }
+    }
+
+    /** "Translate" in the lyrics view: check this song's lyrics again, line by line. */
+    fun translateNow(track: Track) {
+        val current = _lyrics.value[track.id] ?: return
+        translateLater(track, current, File(lyricsDir, safe(track.id) + ".json"), force = true)
     }
 
     private suspend fun fetchOnline(track: Track): Lyrics? {

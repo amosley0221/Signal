@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.63] - 2026-10-12
+
+- **Lyrics: see when a translation is on its way, and ask for one.** While Signal translates a song's lyrics, "Translating…" shows above them. Lyrics with no translation get a **Translate** button that checks them again line by line. If nothing needs translating, or it can't (no connection to download a language), it says so instead of failing silently. A translation that finished while the song's lyrics were being reloaded was sometimes dropped. It now always shows.
+
 ## [1.0.62] - 2026-10-12
 
 - **Spanish verses in English songs get translated too.** Signal used to check a song's language as a whole, so a mostly-English song with a Spanish verse (like "You Stay" with J Balvin) got no translation. Each line is now checked on its own, and lines in another language get an English translation underneath. For these songs the switch above the lyrics reads **Orig / Orig + EN / EN**. "EN" shows the translated lines in English and the English lines as they are.

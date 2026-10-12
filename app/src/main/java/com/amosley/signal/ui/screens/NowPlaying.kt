@@ -378,6 +378,12 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
                 ).joinToString(" · "),
                 style = T.metaMono, color = C.Faint, modifier = Modifier.weight(1f),
             )
+            val busy = t.id in c.repo.translating.collectAsState().value
+            if (busy) Mono("Translating…", style = T.metaMono, color = C.Faint, modifier = Modifier.padding(4.dp))
+            else if (!lyrics.hasTranslation && lyrics.source != "user") {
+                Mono("Translate", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable { c.repo.translateNow(t) }.padding(4.dp))
+            }
+            Spacer(Modifier.width(8.dp))
             Mono(if (lyrics.synced) "Edit" else "Sync", style = T.metaMono, color = C.AmberText,
                 modifier = Modifier.clickable { c.st.sheet = Sheet.LyricsEditor(t.id) }.padding(4.dp))
         }

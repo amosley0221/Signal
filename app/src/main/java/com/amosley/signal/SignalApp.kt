@@ -64,6 +64,7 @@ class SignalApp : Application(), ImageLoaderFactory {
         hub = PlayerHub(this, repo, scope)
         repo.downloads.holdWhile = { hub.streamingFromPc || videoStreaming }
         hub.onToast = ::toast
+        repo.onToast = ::toast
         store = com.amosley.signal.data.StoreDownloads(this, repo.http, scope, onSaved = { repo.addStoreFolder(); repo.rescanPhone() }, toast = ::toast)
         sonos = SonosController(this, repo.http, scope)
         cast = CastManager(this) { output ->
