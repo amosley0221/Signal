@@ -234,6 +234,8 @@ data class Lyrics(
     val lines: List<LyricLine> = emptyList(),
     val synced: Boolean = true,
     val source: String = "pc",
+    /** Already checked for lines needing an English translation (so it isn't redone every time). */
+    val trChecked: Boolean = false,
 ) {
     val hasTranslation: Boolean get() = lines.any { it.tr != null }
 }

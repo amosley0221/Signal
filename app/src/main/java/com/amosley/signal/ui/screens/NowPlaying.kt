@@ -348,13 +348,14 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
         return
     }
     val mode = c.settings.lyricMode
-    val foreign = lyrics.hasTranslation && lyrics.lang != null && lyrics.lang != "en"
+    val foreign = lyrics.hasTranslation
     val active = if (lyrics.synced) Lrc.activeIndex(lyrics.lines, c.player.positionMs / 1000.0) else -1
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     Column(Modifier.fillMaxSize()) {
         if (foreign) {
-            val code = lyrics.lang!!.uppercase()
+            // Mixed songs (mostly English with a verse in another language) show "Original".
+            val code = lyrics.lang?.takeIf { it != "en" }?.uppercase() ?: "Orig"
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.border(1.dp, C.HairStrong)) {
                     listOf(LyricMode.ORIG to code, LyricMode.BOTH to "$code + EN", LyricMode.TRANS to "EN").forEach { (m, label) ->
@@ -365,7 +366,7 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
                     }
                 }
                 Spacer(Modifier.width(10.dp))
-                Mono("${langName(lyrics.lang)} · translated on ${if (lyrics.source == "pc") c.pcName else "device"}", style = T.metaMono, color = C.Faint)
+                Mono(if (lyrics.lang == "en" || lyrics.lang == null) "Some lines translated" else "${langName(lyrics.lang)} · translated", style = T.metaMono, color = C.Faint)
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -403,7 +404,8 @@ fun LyricsView(c: Ctx, t: Track, lyrics: Lyrics?, pane: Boolean) {
                         else -> 0.42f
                     }
                     val a by animateFloatAsState(target, tween(400), label = "ly")
-                    val showOrig = !foreign || mode != LyricMode.TRANS
+                    // English-only view: translated lines in English, lines already in English as they are.
+                    val showOrig = !foreign || mode != LyricMode.TRANS || line.tr == null
                     val showTr = foreign && mode != LyricMode.ORIG && line.tr != null
                     Column(
                         Modifier.fillMaxWidth().alpha(a).clickable(enabled = lyrics.synced) {

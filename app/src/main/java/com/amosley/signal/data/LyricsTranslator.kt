@@ -3,6 +3,7 @@ package com.amosley.signal.data
 import com.amosley.signal.core.LyricLine
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.nl.languageid.LanguageIdentification
+import com.google.mlkit.nl.languageid.LanguageIdentificationOptions
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -15,23 +16,42 @@ import kotlin.coroutines.resumeWithException
  * model (~30 MB per language) downloads once the first time that language comes up; after that it works offline.
  */
 class LyricsTranslator {
-    /** (language code, lines with `tr` filled), or null when the lyrics are already English or the language isn't known. */
+    /**
+     * Lines with `tr` filled for every line not in English, plus the main language translated from; null when
+     * nothing needs translating. Each line is checked on its own, so a Spanish verse in an English song is
+     * translated too; short or unclear lines follow the song's overall language.
+     */
     suspend fun translate(lines: List<LyricLine>, knownLang: String? = null): Pair<String, List<LyricLine>>? {
-        val text = lines.joinToString("\n") { it.text }.take(4000)
-        if (text.isBlank()) return null
-        val lang = knownLang?.lowercase()?.substringBefore('-')
-            ?: LanguageIdentification.getClient().let { id -> try { id.identifyLanguage(text).await() } finally { id.close() } }
-        if (lang == "und" || lang == "en") return null
-        val source = TranslateLanguage.fromLanguageTag(lang) ?: return null
-        val translator = Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(TranslateLanguage.ENGLISH).build())
+        val all = lines.joinToString("\n") { it.text }.take(4000)
+        if (all.isBlank()) return null
+        val id = LanguageIdentification.getClient(LanguageIdentificationOptions.Builder().setConfidenceThreshold(0.5f).build())
+        val perLine: List<String>
+        val whole: String
         try {
-            translator.downloadModelIfNeeded().await()
-            val out = lines.map { l ->
-                if (l.text.isBlank()) l else l.copy(tr = translator.translate(l.text).await().takeIf { it.isNotBlank() && !it.equals(l.text, true) })
-            }
-            return lang to out
+            whole = knownLang?.lowercase()?.substringBefore('-') ?: id.identifyLanguage(all).await()
+            perLine = lines.map { l -> if (l.text.trim().length < 6) "und" else id.identifyLanguage(l.text).await() }
         } finally {
-            translator.close()
+            id.close()
+        }
+        val songForeign = whole != "en" && whole != "und"
+        val langs = perLine.map { if (it == "und" && songForeign) whole else it }
+        val wanted = langs.filter { it != "en" && it != "und" && TranslateLanguage.fromLanguageTag(it) != null }
+        if (wanted.isEmpty()) return null
+        val main = wanted.groupingBy { it }.eachCount().maxBy { it.value }.key
+        val translators = wanted.toSet().associateWith { lang ->
+            Translation.getClient(TranslatorOptions.Builder().setSourceLanguage(TranslateLanguage.fromLanguageTag(lang)!!).setTargetLanguage(TranslateLanguage.ENGLISH).build())
+        }
+        try {
+            translators.values.forEach { it.downloadModelIfNeeded().await() }
+            val out = lines.mapIndexed { i, l ->
+                val t = translators[langs[i]]
+                if (t == null || l.text.isBlank()) l
+                else l.copy(tr = t.translate(l.text).await().takeIf { it.isNotBlank() && !it.equals(l.text, true) })
+            }
+            if (out.none { it.tr != null }) return null
+            return main to out
+        } finally {
+            translators.values.forEach { it.close() }
         }
     }
 }

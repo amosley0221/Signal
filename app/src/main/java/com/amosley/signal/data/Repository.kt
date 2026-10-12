@@ -562,7 +562,7 @@ class Repository(val context: Context, val scope: CoroutineScope) {
 
     /** Foreign-language lyrics without an English version: translate them on the phone, then show both. */
     private fun translateLater(track: Track, lyrics: Lyrics, file: File) {
-        if (!_settings.value.translateLyrics || lyrics.hasTranslation || lyrics.source == "user" || lyrics.lang == "en") return
+        if (!_settings.value.translateLyrics || lyrics.hasTranslation || lyrics.trChecked || lyrics.source == "user") return
         if (!translating.add(track.id)) return
         scope.launch(Dispatchers.IO) {
             val attempt = runCatching { translator.translate(lyrics.lines, lyrics.lang) }
@@ -572,9 +572,17 @@ class Repository(val context: Context, val scope: CoroutineScope) {
                 translating.remove(track.id)
                 return@launch
             }
-            val done = attempt.getOrNull() ?: return@launch // already English, or a language it can't translate
+            val done = attempt.getOrNull()
+            if (done == null) {
+                // All English (or a language it can't translate): note it so it isn't checked again.
+                val checked = lyrics.copy(trChecked = true)
+                if (_lyrics.value[track.id] === lyrics) _lyrics.update { it + (track.id to checked) }
+                runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), checked)) }
+                return@launch
+            }
             val (lang, lines) = done
-            val translated = lyrics.copy(lang = lang, lines = lines)
+            // A mostly-English song keeps "en" as its language; its foreign lines still carry translations.
+            val translated = lyrics.copy(lang = if (lyrics.lang == "en") "en" else lang, lines = lines, trChecked = true)
             if (_lyrics.value[track.id] === lyrics) _lyrics.update { it + (track.id to translated) }
             runCatching { file.writeText(SignalJson.encodeToString(Lyrics.serializer(), translated)) }
         }

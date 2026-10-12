@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.62] - 2026-10-12
+
+- **Spanish verses in English songs get translated too.** Signal used to check a song's language as a whole, so a mostly-English song with a Spanish verse (like "You Stay" with J Balvin) got no translation. Each line is now checked on its own, and lines in another language get an English translation underneath. For these songs the switch above the lyrics reads **Orig / Orig + EN / EN**. "EN" shows the translated lines in English and the English lines as they are.
+
 ## [1.0.61] - 2026-10-12
 
 - **Store: searching Qobuz has room again.** While the keyboard was open, Signal's title, tabs, store bar, mini player and bottom tabs stayed on screen. That left Qobuz's search a thin strip that stayed squashed. Now these hide while you type, so the store gets the whole screen above the keyboard, and they come back when the keyboard closes. Typing elsewhere in Signal also hides the mini player and bottom tabs.
