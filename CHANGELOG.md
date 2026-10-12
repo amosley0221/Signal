@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.60] - 2026-10-12
+
+- **The screen stays on while a movie or episode plays.** It used to dim and lock after the phone's normal timeout, leaving only the sound. The screen now stays awake while a video plays or loads. When you pause, the phone sleeps as usual.
+
 ## [1.0.59] - 2026-10-09
 
 - **Store: "Buy the album" works.** Qobuz's buy and checkout buttons open a new window, and Signal's store didn't allow that, so tapping them did nothing. New windows now open right in the store, and the site's pop-up messages show too.

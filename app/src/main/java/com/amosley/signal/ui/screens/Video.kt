@@ -406,6 +406,13 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
     var playing by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
     var buffering by remember { mutableStateOf(true) }
+    // Keep the screen awake while the video plays or loads (paused, the phone may sleep as usual).
+    val hostView = androidx.compose.ui.platform.LocalView.current
+    val awake = playing || buffering
+    DisposableEffect(awake) {
+        hostView.keepScreenOn = awake
+        onDispose { hostView.keepScreenOn = false }
+    }
     var error by remember { mutableStateOf<String?>(null) }
     val casting = app.videoCast
     val fromPc = src.uri.scheme?.startsWith("http") == true
