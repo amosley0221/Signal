@@ -1,5 +1,6 @@
 package com.amosley.signal.ui
 
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -188,14 +189,19 @@ private fun ScreenContent(c: Ctx, screen: Screen) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun Folded(c: Ctx) {
+    // While typing, the keyboard needs the room: hide the mini player and tabs so the page above keeps its space.
+    val typing = WindowInsets.isImeVisible
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
         Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
             ScreenContent(c, c.st.screen)
         }
-        if (c.player.current != null) MiniPlayer(c)
-        BottomNav(c)
+        if (!typing) {
+            if (c.player.current != null) MiniPlayer(c)
+            BottomNav(c)
+        }
     }
 }
 

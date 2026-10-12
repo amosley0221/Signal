@@ -57,7 +57,7 @@ import com.amosley.signal.ui.theme.T
 /** The store page plus its download list; used by the Store tab and by "Find on Qobuz" links. */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = false, onPage: (String) -> Unit = {}) {
+fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = false, compact: Boolean = false, onPage: (String) -> Unit = {}) {
     val app = c.app
     val context = LocalContext.current
     var web by remember { mutableStateOf<WebView?>(null) }
@@ -79,7 +79,7 @@ fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = fa
     }
 
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = if (showBack) 12.dp else 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!compact) Row(Modifier.fillMaxWidth().padding(horizontal = if (showBack) 12.dp else 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showBack) {
                 Box(Modifier.size(36.dp).clickable { c.st.back() }, contentAlignment = Alignment.Center) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = C.Fg)
@@ -155,7 +155,7 @@ fun StoreBrowser(c: Ctx, url: String, modifier: Modifier, showBack: Boolean = fa
                 }
             },
         )
-        if (jobs.isNotEmpty()) {
+        if (jobs.isNotEmpty() && !compact) {
             Hairline()
             Column(Modifier.fillMaxWidth().background(C.Card).padding(horizontal = 16.dp, vertical = 6.dp)) {
                 jobs.takeLast(3).forEach { j -> StoreJobRow(j) { app.store.dismiss(j.id) } }

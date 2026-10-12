@@ -1,5 +1,7 @@
 package com.amosley.signal.ui.screens
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -120,6 +122,7 @@ fun StatusLine(c: Ctx, modifier: Modifier = Modifier) {
 private const val POSTER_COLS = 3
 private const val ALBUM_COLS = 2
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun LibraryPane(c: Ctx) {
     val st = c.st
@@ -128,11 +131,15 @@ fun LibraryPane(c: Ctx) {
     val jump = remember { JumpIndex() }
     // The store is a web page with its own scrolling: it fills the pane under the tabs instead of joining the list.
     if (section == Section.MUSIC && st.tab == MusicTab.STORE) {
+        // Typing in the store (search, sign-in, checkout): give the page the whole screen above the keyboard.
+        val typing = WindowInsets.isImeVisible
         Column(Modifier.fillMaxSize()) {
-            LibraryHeader(c, section)
-            SubTabs(c)
+            if (!typing) {
+                LibraryHeader(c, section)
+                SubTabs(c)
+            }
             androidx.compose.runtime.key(st.storeNonce) {
-                StoreBrowser(c, st.storeUrl ?: com.amosley.signal.core.StoreFiles.QOBUZ_HOME, Modifier.weight(1f), onPage = { st.storeUrl = it })
+                StoreBrowser(c, st.storeUrl ?: com.amosley.signal.core.StoreFiles.QOBUZ_HOME, Modifier.weight(1f), compact = typing, onPage = { st.storeUrl = it })
             }
         }
         return
