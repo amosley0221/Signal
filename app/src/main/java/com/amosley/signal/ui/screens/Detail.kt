@@ -224,7 +224,7 @@ fun MusicVideoRow(c: Ctx, v: MusicVideo) {
                 Spacer(Modifier.width(6.dp))
                 Mono(listOfNotNull(v.resLabel, if (v.hdr) "HDR" else null, Fmt.dur(v.durationMs)).joinToString(" · "), style = T.metaMono, color = C.Faint)
             }
-            Mono(if (v.origin == Origin.PHONE) "On this phone" else if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}", style = T.metaMono, color = C.Faint)
+            Mono(if (v.origin == Origin.PHONE) "On this ${c.device}" else if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}", style = T.metaMono, color = C.Faint)
         }
         DlButton(c, v.id, v.origin) { c.repo.download(v) }
     }

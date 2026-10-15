@@ -44,6 +44,12 @@ class SignalApp : Application(), ImageLoaderFactory {
 
     fun toast(msg: String) { _toasts.tryEmit(msg) }
 
+    /** "phone" or "tablet", for wording. A foldable (hinge sensor) is a phone even when unfolded. */
+    val deviceWord: String by lazy {
+        val hinge = packageManager.hasSystemFeature("android.hardware.sensor.hinge_angle")
+        if (!hinge && resources.configuration.smallestScreenWidthDp >= 600) "tablet" else "phone"
+    }
+
     /** Video casting is separate from the music queue: the TV plays one video, the phone is the remote. */
     var videoCast by mutableStateOf<CastOutput?>(null)
     var pendingVideoCast = false

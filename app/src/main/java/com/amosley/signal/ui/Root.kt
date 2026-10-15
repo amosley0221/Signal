@@ -81,6 +81,8 @@ class Ctx(
     val favorites: Set<String> = emptySet(),
 ) {
     val repo get() = app.repo
+    /** "phone" or "tablet". */
+    val device: String get() = app.deviceWord
     val hub get() = app.hub
     val pcName: String get() = settings.pc?.name ?: "PC"
 

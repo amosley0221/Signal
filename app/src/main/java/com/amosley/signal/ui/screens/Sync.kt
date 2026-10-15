@@ -174,7 +174,7 @@ fun SyncScreen(c: Ctx) {
                                     }
                                     LibModeItem("Stream", "Play from ${pc.name} over Wi-Fi or Tailscale. Nothing is stored on the phone except what you download yourself.", mode == LibMode.STREAM) { pick(LibMode.STREAM) }
                                     LibModeItem("Download new", "Stream everything, and download files added to ${pc.name} from now on.", mode == LibMode.DOWNLOAD_NEW) { pick(LibMode.DOWNLOAD_NEW) }
-                                    LibModeItem("Download all", "Keep a copy of every file on this phone, so it plays without ${pc.name}.", mode == LibMode.DOWNLOAD_ALL) { pick(LibMode.DOWNLOAD_ALL) }
+                                    LibModeItem("Download all", "Keep a copy of every file on this ${c.device}, so it plays without ${pc.name}.", mode == LibMode.DOWNLOAD_ALL) { pick(LibMode.DOWNLOAD_ALL) }
                                     LibModeItem("Hidden", "Don't show this library on the phone. Files already downloaded stay.", mode == null) { pick(null) }
                                 }
                             }
@@ -262,7 +262,7 @@ fun SyncScreen(c: Ctx) {
                         Spacer(Modifier.height(6.dp))
                     }
                     Hairline()
-                    SettingRow("Upload phone-only songs", "Copy songs that are only on this phone to the PC's music folder so Plex sees them") {
+                    SettingRow("Upload ${c.device}-only songs", "Copy songs that are only on this ${c.device} to the PC's music folder so Plex sees them") {
                         Toggle(s.uploadPhoneOnly) { v -> repo.updateSettings { it.copy(uploadPhoneOnly = v) }; if (v) repo.refresh(force = true) }
                     }
                     Hairline()
@@ -278,11 +278,11 @@ fun SyncScreen(c: Ctx) {
             }
         }
 
-        CardTitle("This phone")
+        CardTitle("This ${c.device}")
         CardBox {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Music & videos on this phone", style = T.row)
+                    Text("Music & videos on this ${c.device}", style = T.row)
                     Text(
                         if (s.phoneFolders.isEmpty()) "No folders chosen yet" else "${s.phoneFolders.size} folder${if (s.phoneFolders.size != 1) "s" else ""} · ${c.lib.tracks.count { it.origin == com.amosley.signal.core.Origin.PHONE }} songs",
                         style = T.ui(12.5.sp), color = C.Muted,

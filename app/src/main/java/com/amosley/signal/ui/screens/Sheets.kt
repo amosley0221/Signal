@@ -252,7 +252,7 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
         Spacer(Modifier.height(12.dp))
         Text(
             "Suggestions use the title, synced lyrics, mood tags and artists already in your library. " +
-                if (t.origin == Origin.PC) "The ARTIST tag is written back to the file on ${c.pcName}." else "The name is saved on this phone.",
+                if (t.origin == Origin.PC) "The ARTIST tag is written back to the file on ${c.pcName}." else "The name is saved on this ${c.device}.",
             style = T.ui(12.5.sp), color = C.Faint,
         )
     }
@@ -295,7 +295,7 @@ private fun TagFields(c: Ctx, t: com.amosley.signal.core.Track) {
         c.toast(if (t.origin == Origin.PC) "Saved · writing tags on ${c.pcName}" else "Saved")
     }
     if (t.origin == Origin.PHONE) {
-        Text("Changes to songs on this phone are saved in Signal; the file itself isn't changed.", style = T.ui(12.sp), color = C.Faint, modifier = Modifier.padding(top = 6.dp))
+        Text("Changes to songs on this ${c.device} are saved in Signal; the file itself isn't changed.", style = T.ui(12.sp), color = C.Faint, modifier = Modifier.padding(top = 6.dp))
     }
 }
 
@@ -468,7 +468,7 @@ private fun ColumnScope.NewPlaylistSheet(c: Ctx, trackId: String?) {
     SheetHeader("New playlist", null, "Cancel", { c.st.sheet = null })
     Field(name, { name = it }, "Playlist name")
     Spacer(Modifier.height(8.dp))
-    Mono("Saved on this phone", style = T.metaMono, color = C.Faint)
+    Mono("Saved on this ${c.device}", style = T.metaMono, color = C.Faint)
     Spacer(Modifier.height(16.dp))
     FilledBtn("Create", bg = C.Amber, fg = C.OnAmber, enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
         val pl = c.repo.createPlaylist(name, trackId)
@@ -601,12 +601,12 @@ private fun ColumnScope.CastSheet(c: Ctx, video: Boolean) {
     }
     SheetHeader("Play on", note, "Done", { c.st.sheet = null })
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-        OutputRow("This phone", "Speaker / headphones", c.player.output == null && app.videoCast == null) {
+        OutputRow("This ${c.device}", "Speaker / headphones", c.player.output == null && app.videoCast == null) {
             if (c.player.outputKind == OutputKind.CAST || app.videoCast != null) app.cast.disconnect()
             app.hub.setRemote(null)
             app.videoCast = null
             c.st.sonosGroup = emptySet()
-            c.toast("Playing on this phone")
+            c.toast("Playing on this ${c.device}")
         }
         castDevices.forEach { d ->
             val active = d.selected
@@ -798,8 +798,8 @@ private fun ColumnScope.EqSheet(c: Ctx) {
     var gains by remember { mutableStateOf(saved.eq.gains.takeIf { it.size == Eq.FREQS.size } ?: List(Eq.FREQS.size) { 0f }) }
     fun save(g: List<Float> = gains, enabled: Boolean = on) = c.repo.updateSettings { it.copy(eq = EqSettings(enabled, g)) }
     val preset = Eq.presetOf(gains)
-    val note = if (c.player.output != null) "Playing on ${c.player.output}: the equalizer only changes music played on this phone"
-    else "Music played on this phone · speaker, headphones and Bluetooth"
+    val note = if (c.player.output != null) "Playing on ${c.player.output}: the equalizer only changes music played on this ${c.device}"
+    else "Music played on this ${c.device} · speaker, headphones and Bluetooth"
     SheetHeader("Equalizer", note, "Done", { c.st.sheet = null })
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

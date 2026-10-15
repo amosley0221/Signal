@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.66] - 2026-10-15
+
+- **Signal knows when it's on a tablet.** Wording like "Choose folders on this phone" now says "tablet" on a tablet. A Galaxy Z Fold still counts as a phone, even unfolded.
+- **The "Choose folders" card can be dismissed.** Tap the ✕ on it if you don't keep music or videos on the device, for example a tablet that only streams from the PC. You can still pick folders later in Settings.
+- **Settings can be closed on large screens.** Opening Settings from the "Choose" button on a tablet or an unfolded Fold left no way back. It now opens next to the library with a back button, and Settings opened on its own has one too, returning the library to full width.
+
 ## [1.0.65] - 2026-10-15
 
 - Setup: once your PC is found, the "Searching the network…" spinner goes away and Signal tells you to tap the PC to connect.

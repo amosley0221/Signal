@@ -177,7 +177,7 @@ fun MovieScreen(c: Ctx, id: String) {
                         Spacer(Modifier.height(4.dp))
                         Text(listOfNotNull(m.year?.toString(), if (m.durationMs > 0) Fmt.runtime(m.durationMs) else null, m.genres.firstOrNull()).joinToString(" · "), style = T.meta, color = C.Muted)
                         Text(
-                            listOfNotNull(m.director?.let { "Directed by $it" }, if (m.origin == Origin.PHONE) "On this phone" else if (c.dlState(m.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "),
+                            listOfNotNull(m.director?.let { "Directed by $it" }, if (m.origin == Origin.PHONE) "On this ${c.device}" else if (c.dlState(m.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "),
                             style = T.ui(12.5.sp), color = C.Faint,
                         )
                     }
@@ -444,7 +444,7 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
                     androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
                     androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
                     androidx.media3.common.PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
-                    -> "This phone can't play this video's format. Try Cast to play it on a TV."
+                    -> "This ${c.device} can't play this video's format. Try Cast to play it on a TV."
                     androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                     androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
                     androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
@@ -635,7 +635,7 @@ fun VideoScreen(c: Ctx, screen: Screen.Video) {
                         Spacer(Modifier.height(4.dp))
                         Mono(
                             listOfNotNull(resolutionLabel(src.width, src.height), if (src.subtitles.isNotEmpty()) "Subtitles" else null, "Direct play",
-                                if (src.origin == Origin.PHONE) "On this phone" else if (c.dlState(src.id) is DlState.Done) "Downloaded" else c.pcName).joinToString(" · "),
+                                if (src.origin == Origin.PHONE) "On this ${c.device}" else if (c.dlState(src.id) is DlState.Done) "Downloaded" else c.pcName).joinToString(" · "),
                             style = T.metaMono, color = C.Faint,
                         )
                         Spacer(Modifier.height(6.dp))

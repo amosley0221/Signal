@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
@@ -412,11 +413,16 @@ private fun LazyListScope.recent(c: Ctx, albumCols: Int) {
             CardBox {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Choose folders on this phone", style = T.rowSecondary)
+                        Text("Choose folders on this ${c.device}", style = T.rowSecondary)
                         Spacer(Modifier.height(3.dp))
                         Text("Pick which folders hold your music, music videos, movies and TV", style = T.meta, color = C.Muted)
                     }
-                    OutlineBtn("Choose", color = C.AmberText, border = C.Amber) { c.st.goSection(Section.SETTINGS) }
+                    OutlineBtn("Choose", color = C.AmberText, border = C.Amber) { if (c.unfolded) c.st.push(Screen.Settings) else c.st.goSection(Section.SETTINGS) }
+                    Spacer(Modifier.width(6.dp))
+                    // Nothing to pick (e.g. a tablet that only streams from the PC): hide this for good.
+                    Box(Modifier.size(32.dp).clickable { c.repo.updateSettings { it.copy(phoneFoldersChosen = true) } }, contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Close, "Not now", tint = C.Muted, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -484,8 +490,8 @@ private fun EmptyLibrary(c: Ctx) {
         Mono("Nothing here yet", color = C.Muted)
         Spacer(Modifier.height(10.dp))
         Text(
-            if (c.settings.pc == null) "Pair your PC to stream and sync your library, or allow access to music on this phone."
-            else "Your library will appear once ${c.pcName} finishes scanning. Music already on this phone shows up here too.",
+            if (c.settings.pc == null) "Pair your PC to stream and sync your library, or allow access to music on this ${c.device}."
+            else "Your library will appear once ${c.pcName} finishes scanning. Music already on this ${c.device} shows up here too.",
             style = T.ui(14.5.sp), color = C.Muted,
         )
         Spacer(Modifier.height(16.dp))
@@ -645,7 +651,7 @@ fun MusicVideoCard(c: Ctx, v: MusicVideo) {
         }
         Spacer(Modifier.height(8.dp))
         Text(v.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Mono(listOfNotNull(v.resLabel, if (v.hdr) "HDR" else null, Fmt.dur(v.durationMs), if (v.origin == Origin.PHONE) "On this phone" else if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "), style = T.metaMono, color = C.Faint)
+        Mono(listOfNotNull(v.resLabel, if (v.hdr) "HDR" else null, Fmt.dur(v.durationMs), if (v.origin == Origin.PHONE) "On this ${c.device}" else if (c.dlState(v.id) is DlState.Done) "Downloaded" else "Stream from ${c.pcName}").joinToString(" · "), style = T.metaMono, color = C.Faint)
     }
 }
 

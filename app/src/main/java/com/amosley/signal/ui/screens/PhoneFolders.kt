@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -43,6 +44,7 @@ import com.amosley.signal.data.PhoneFolderType
 import com.amosley.signal.data.PhoneLibrary
 import com.amosley.signal.ui.Ctx
 import com.amosley.signal.ui.Screen
+import com.amosley.signal.ui.Section
 import com.amosley.signal.ui.Sheet
 import com.amosley.signal.ui.components.Hairline
 import com.amosley.signal.ui.components.Mono
@@ -74,7 +76,7 @@ fun PhoneFoldersScreen(c: Ctx) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlineBtn("Rescan") { c.repo.rescanPhone(); c.toast("Scanning this phone") }
+                    OutlineBtn("Rescan") { c.repo.rescanPhone(); c.toast("Scanning this ${c.device}") }
                     if (chosen.isNotEmpty()) OutlineBtn("Clear all", color = C.AmberText) {
                         c.repo.updateSettings { it.copy(phoneFolders = emptyMap(), phoneFoldersChosen = true) }
                     }
@@ -98,6 +100,10 @@ fun SettingsScreen(c: Ctx) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (c.st.stack.size > 1) {
                         BackButton(c)
+                        Spacer(Modifier.width(12.dp))
+                    } else if (c.unfolded) {
+                        // Opened as its own section on the big screen: back to the library at full width.
+                        com.amosley.signal.ui.components.SquareBtn(Icons.AutoMirrored.Filled.ArrowBack, size = 38.dp, desc = "Close") { c.st.goSection(Section.MUSIC) }
                         Spacer(Modifier.width(12.dp))
                     }
                     Text("Settings", style = T.sectionTitle)
@@ -144,17 +150,17 @@ fun SettingsScreen(c: Ctx) {
                 ) { Toggle(c.settings.onlineLyrics) { v -> c.repo.updateSettings { it.copy(onlineLyrics = v) } } }
                 SettingRow(
                     "Find movie & TV details online",
-                    "For videos only on this phone: posters and summaries from Apple TV (movies) and TVmaze (shows). Titles in your PC's Plex library use Plex instead.",
+                    "For videos only on this ${c.device}: posters and summaries from Apple TV (movies) and TVmaze (shows). Titles in your PC's Plex library use Plex instead.",
                 ) { Toggle(c.settings.onlineVideoInfo) { v -> c.repo.updateSettings { it.copy(onlineVideoInfo = v) }; if (v) c.repo.enrichPhoneVideos() } }
                 SettingRow(
                     "Include Plex's Continue Watching",
                     "Continue Watching and Up Next show what you watch in Signal. Turn this on to also show what's in Plex's Continue Watching row (things you watched on the TV or in the Plex app).",
                 ) { Toggle(c.settings.plexContinueWatching) { v -> c.repo.updateSettings { it.copy(plexContinueWatching = v) } } }
                 Spacer(Modifier.height(16.dp))
-                Mono("Songs on both phone and PC", color = C.Muted)
+                Mono("Songs on both ${c.device} and PC", color = C.Muted)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "The same song (title, artist, album and length) on this phone and on ${c.pcName} shows once. Choose which copy plays: the phone copy works without the PC; the PC copy keeps edits and lyrics in sync.",
+                    "The same song (title, artist, album and length) on this ${c.device} and on ${c.pcName} shows once. Choose which copy plays: the phone copy works without the PC; the PC copy keeps edits and lyrics in sync.",
                     style = T.ui(13.sp), color = C.Muted,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -168,7 +174,7 @@ fun SettingsScreen(c: Ctx) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Mono("Folders on this phone", color = C.Muted)
+                Mono("Folders on this ${c.device}", color = C.Muted)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "Only the folders you choose show up in Signal. Choosing a folder includes the folders inside it.",
@@ -176,7 +182,7 @@ fun SettingsScreen(c: Ctx) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlineBtn("Rescan") { c.repo.rescanPhone(); c.toast("Scanning this phone") }
+                    OutlineBtn("Rescan") { c.repo.rescanPhone(); c.toast("Scanning this ${c.device}") }
                     if (chosen.isNotEmpty()) OutlineBtn("Clear all", color = C.AmberText) {
                         c.repo.updateSettings { it.copy(phoneFolders = emptyMap(), phoneFoldersChosen = true) }
                     }
