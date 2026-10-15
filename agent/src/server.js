@@ -129,6 +129,18 @@ export function createServer(agent) {
 
   route('GET', '/api/pair/status/:id', (req, res, p) => sendJson(req, res, 200, state.pairStatus(p.id)), { auth: false });
 
+  // A paired phone can approve a new device (e.g. a tablet) when nobody is at the PC. Both screens show the same code.
+  route('GET', '/api/pair/pending', (req, res) => sendJson(req, res, 200, state.pendingPairs()));
+  route('POST', '/api/pair/:id/approve', (req, res, p) => {
+    const r = agent.approvePairing(p.id);
+    if (r) agent.log(`[pair] approved from a paired device: ${p.id}`);
+    sendJson(req, res, r ? 200 : 404, r ? { ok: true } : { error: 'not_found' });
+  });
+  route('POST', '/api/pair/:id/deny', (req, res, p) => {
+    const r = agent.denyPairing(p.id);
+    sendJson(req, res, r ? 200 : 404, r ? { ok: true } : { error: 'not_found' });
+  });
+
   // ---- authenticated ----
   route('GET', '/api/libraries', (req, res) => sendJson(req, res, 200, agent.catalog.getLibraries()));
   // The catalogue can be many MB: serialize and gzip it once per build (asynchronously), not on every request,

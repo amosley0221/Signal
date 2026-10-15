@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.64] - 2026-10-15
+
+- **Approve a new device from your phone.** When another device (a tablet, say) asks to pair with your PC, Signal on your already-paired phone shows it under Settings → PC sync with its code. Tap **Approve**, so nobody has to be at the PC. This needs Signal Agent 1.0.64 on the PC: update it from the same screen.
+- **Finding the PC during setup is more reliable.** Besides listening for the PC's announcement on Wi-Fi, which many routers and Windows firewalls block, Signal now asks every address on the Wi-Fi for the agent directly. If nothing turns up after a few seconds, setup explains how to connect from away from home with Tailscale and the PC's 100.x address.
+- "Can't reach the PC" now reminds you to check that Tailscale is on when you're away from home.
+
 ## [1.0.63] - 2026-10-12
 
 - **Lyrics: see when a translation is on its way, and ask for one.** While Signal translates a song's lyrics, "Translating…" shows above them. Lyrics with no translation get a **Translate** button that checks them again line by line. If nothing needs translating, or it can't (no connection to download a language), it says so instead of failing silently. A translation that finished while the song's lyrics were being reloaded was sometimes dropped. It now always shows.

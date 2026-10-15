@@ -28,6 +28,7 @@ val SignalJson = Json {
 
 @Serializable data class AgentInfo(val name: String, val version: String? = null, val id: String, val plex: Boolean = false, val addresses: List<String> = emptyList())
 @Serializable data class PairStart(val requestId: String, val code: String)
+@Serializable data class PendingPair(val id: String, val code: String, val deviceName: String? = null, val ip: String? = null, val createdAt: Long = 0)
 @Serializable data class PairStatus(val status: String, val token: String? = null)
 @Serializable data class ApiLyrics(val lang: String? = null, val lines: List<LyricLine> = emptyList(), val translation: List<LyricLine>? = null, val synced: Boolean = true)
 @Serializable data class ActivityItem(val id: String, val kind: String, val title: String, val detail: String? = null, val state: String, val progress: Double? = null)
@@ -69,6 +70,12 @@ class AgentClient(private val http: OkHttpClient) {
 
     suspend fun pairStatus(base: String, requestId: String): PairStatus =
         SignalJson.decodeFromString(call(base, "/api/pair/status/$requestId", null))
+
+    /** Devices waiting to be paired; a paired phone can approve them (agent 1.0.64+). */
+    suspend fun pendingPairs(base: String, token: String): List<PendingPair> = SignalJson.decodeFromString(call(base, "/api/pair/pending", token, timeoutSec = 10))
+    suspend fun answerPair(base: String, token: String, id: String, approve: Boolean) {
+        call(base, "/api/pair/$id/${if (approve) "approve" else "deny"}", token, "{}".toRequestBody(jsonType))
+    }
 
     suspend fun libraries(base: String, token: String): List<Library> = SignalJson.decodeFromString(call(base, "/api/libraries", token))
 

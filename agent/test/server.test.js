@@ -227,3 +227,19 @@ test('update endpoints: phone needs a token, admin needs localhost + header', as
   assert.equal(install.status, 409);
   await install.json();
 });
+
+test('a paired device can see and approve another device\'s pairing request', async () => {
+  const noAuth = await fetch(`${base}/api/pair/pending`);
+  assert.equal(noAuth.status, 401);
+  const s = await fetch(`${base}/api/pair/start`, { method: 'POST', body: JSON.stringify({ deviceName: 'Galaxy Tab' }) });
+  const { requestId, code } = await s.json();
+  const pending = await (await api('/api/pair/pending')).json();
+  const mine = pending.find((x) => x.id === requestId);
+  assert.equal(mine.code, code);
+  assert.equal(mine.deviceName, 'Galaxy Tab');
+  const ok = await api(`/api/pair/${requestId}/approve`, { method: 'POST' });
+  assert.equal(ok.status, 200);
+  const st = await (await fetch(`${base}/api/pair/status/${requestId}`)).json();
+  assert.equal(st.status, 'approved');
+  assert.equal((await api('/api/pair/nope/approve', { method: 'POST' })).status, 404);
+});

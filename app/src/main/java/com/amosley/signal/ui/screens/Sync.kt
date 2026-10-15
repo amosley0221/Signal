@@ -103,12 +103,13 @@ fun SyncScreen(c: Ctx) {
                 }
             }
         } else {
+            PairRequests(c)
             if (!c.status.reachable && !c.status.checking) {
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth().border(1.dp, C.Amber).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Can't reach ${pc.name}", style = T.rowSecondary, color = C.AmberText)
-                        Text("Downloads keep playing; streaming items are greyed out.", style = T.ui(12.5.sp), color = C.Muted)
+                        Text("Downloads keep playing; streaming items are greyed out. Away from home? Check that Tailscale is on.", style = T.ui(12.5.sp), color = C.Muted)
                     }
                     OutlineBtn("Retry", color = C.AmberText, border = C.Amber) { repo.refresh(force = true) }
                 }
@@ -517,6 +518,15 @@ fun PairScreen(c: Ctx) {
                         Spacer(Modifier.width(10.dp))
                         Mono("Searching the network…", style = T.metaMono, color = C.Faint)
                     }
+                    // Nothing after a while: most likely not on the PC's network (away from home).
+                    var slow by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { kotlinx.coroutines.delay(8000); slow = true }
+                    if (slow && found.isEmpty()) {
+                        Text(
+                            "Not at home, or not on the same Wi-Fi as the PC? Install Tailscale on this device, sign in to the same account, and enter the PC's Tailscale address below. It's shown on your phone under Settings → PC sync (100.x.x.x:8765).",
+                            style = T.ui(13.sp), color = C.AmberText,
+                        )
+                    }
                     Spacer(Modifier.height(16.dp))
                     Mono("Or enter address manually", color = C.Muted)
                     Spacer(Modifier.height(6.dp))
@@ -531,7 +541,7 @@ fun PairScreen(c: Ctx) {
                     }
                 }
                 1 -> {
-                    Text("Check that ${agentName.ifEmpty { "your PC" }} shows the same code, then approve it there (open http://localhost:8765 on the PC, or type approve ${code ?: ""} in the agent window).", style = T.ui(14.sp), color = C.Muted)
+                    Text("Approve this device in Signal on a phone that's already paired (Settings → PC sync), or on ${agentName.ifEmpty { "the PC" }} itself (open http://localhost:8765 there). Check that it shows the same code.", style = T.ui(14.sp), color = C.Muted)
                     Spacer(Modifier.height(28.dp))
                     val cd = code ?: "------"
                     Text("${cd.take(3)} · ${cd.drop(3)}", style = T.mono(44.sp, 600, 0.06.sp), color = C.Fg, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -697,4 +707,42 @@ private fun LibModeItem(title: String, detail: String, on: Boolean, onClick: () 
         },
         onClick = onClick,
     )
+}
+
+/** A new device (e.g. a tablet) asking to pair: approve it from here when nobody is at the PC. */
+@Composable
+private fun PairRequests(c: Ctx) {
+    val repo = c.repo
+    val pc = c.settings.pc ?: return
+    val base = c.status.baseUrl ?: return
+    var pending by remember { mutableStateOf<List<com.amosley.signal.data.PendingPair>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(base) {
+        while (true) {
+            pending = runCatching { repo.agent.pendingPairs(base, pc.token) }.getOrDefault(emptyList())
+            kotlinx.coroutines.delay(3000)
+        }
+    }
+    pending.forEach { p ->
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.fillMaxWidth().border(1.dp, C.Amber).padding(14.dp)) {
+            Text("${p.deviceName ?: "A device"} wants to connect", style = T.rowSecondary, color = C.AmberText)
+            Text("Approve only if it shows this code:", style = T.ui(12.5.sp), color = C.Muted)
+            Spacer(Modifier.height(6.dp))
+            Text("${p.code.take(3)} · ${p.code.drop(3)}", style = T.mono(26.sp, 600, 0.06.sp), color = C.Fg)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledBtn("Approve", bg = C.Amber, fg = C.OnAmber) {
+                    scope.launch {
+                        runCatching { repo.agent.answerPair(base, pc.token, p.id, true) }
+                            .onSuccess { pending = pending - p; c.toast("${p.deviceName ?: "Device"} connected") }
+                            .onFailure { c.toast("Couldn't approve: ${it.message}") }
+                    }
+                }
+                OutlineBtn("Deny") {
+                    scope.launch { runCatching { repo.agent.answerPair(base, pc.token, p.id, false) }; pending = pending - p }
+                }
+            }
+        }
+    }
 }
