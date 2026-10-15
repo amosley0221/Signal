@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.65] - 2026-10-15
+
+- Setup: once your PC is found, the "Searching the network…" spinner goes away and Signal tells you to tap the PC to connect.
+
 ## [1.0.64] - 2026-10-15
 
 - **Approve a new device from your phone.** When another device (a tablet, say) asks to pair with your PC, Signal on your already-paired phone shows it under Settings → PC sync with its code. Tap **Approve**, so nobody has to be at the PC. This needs Signal Agent 1.0.64 on the PC: update it from the same screen.

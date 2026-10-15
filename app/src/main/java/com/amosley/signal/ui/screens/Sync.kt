@@ -513,7 +513,8 @@ fun PairScreen(c: Ctx) {
                         }
                         Spacer(Modifier.height(8.dp))
                     }
-                    if (searching || found.isEmpty()) Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (found.isNotEmpty()) Mono("Tap your PC to connect", style = T.metaMono, color = C.AmberText, modifier = Modifier.padding(vertical = 6.dp))
+                    if (found.isEmpty()) Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Spinner(Modifier.size(12.dp))
                         Spacer(Modifier.width(10.dp))
                         Mono("Searching the network…", style = T.metaMono, color = C.Faint)
