@@ -28,6 +28,8 @@ const PUBLISH_MIN_MS = 30_000;
 const IO_SLOTS = 8;
 const IO_SLOTS_STREAMING = 1;
 const META_TIMEOUT_MS = 30000;
+// Bumped when tag reading improves, so files that failed before are read again.
+const META_VERSION = 2;
 function withTimeout(promise, ms, message) {
   let t;
   return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(message)), ms); t.unref?.(); })]).finally(() => clearTimeout(t));
@@ -325,7 +327,10 @@ export class Catalog {
     }
     const mtime = Math.round(st.mtimeMs);
     let entry;
-    if (cached && cached.mtime === mtime && cached.size === st.size && cached.meta) {
+    // Files this agent couldn't read before (e.g. damaged WAVs) are read again, since newer agents read more.
+    const weakWav = /\.wav$/i.test(f.abs) && cached?.meta && (!cached.meta.durationMs || !cached.meta.title);
+    const retry = (cached?.meta?.error || weakWav) && cached.metaVersion !== META_VERSION;
+    if (cached && cached.mtime === mtime && cached.size === st.size && cached.meta && !retry) {
       entry = { ...cached };
     } else {
       let meta;
@@ -341,7 +346,7 @@ export class Catalog {
         meta = { error: String(e.message || e) };
       }
       const birth = st.birthtimeMs > 0 ? Math.round(st.birthtimeMs) : mtime;
-      entry = { rel, kind: f.kind, mtime, size: st.size, addedAt: cached?.addedAt || Math.min(birth, Date.now()), meta, _parsed: true };
+      entry = { rel, kind: f.kind, mtime, size: st.size, addedAt: cached?.addedAt || Math.min(birth, Date.now()), meta, metaVersion: META_VERSION, _parsed: true };
     }
     const ownFolder = rel.includes('/');
     const side = findSidecars(f.name, listing || new Map(), role, ownFolder);
@@ -460,10 +465,12 @@ export class Catalog {
           let o = {};
           if (ov) { if (ov.fileMtime === e.mtime) o = ov; else staleOverrides.push(id); }
           const leadNo = /^(\d{1,3})[\s.\-_]/.exec(baseName);
+          // No title/artist tags: "Artist - Title.wav" (after any leading track number) gives both.
+          const dash = !m.title && !m.artist ? /^(.+?)\s+[-–]\s+(.+)$/.exec(stripTrackNo(baseName)) : null;
           const t = {
             id, libraryId: lib.id,
-            title: o.title ?? m.title ?? stripTrackNo(baseName),
-            artist: o.artist ?? m.artist ?? null,
+            title: o.title ?? m.title ?? (dash ? dash[2].trim() : stripTrackNo(baseName)),
+            artist: o.artist ?? m.artist ?? (dash ? dash[1].trim() : null),
             album: o.album ?? m.album ?? parentName,
             albumArtist: o.albumArtist ?? m.albumArtist ?? null,
             year: o.year ? Number(o.year) : m.year ?? null,

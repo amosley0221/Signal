@@ -3,6 +3,12 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.67] - 2026-10-17
+
+- **WAV files show their real artist, album, track number and length.** Some WAV files are slightly malformed (wrong sizes or unpadded sections, which some editing tools leave behind). The PC agent couldn't read them at all, so they showed the file name, the folder name as the album, no track number and 0:00. The agent now reads these files in a more forgiving way, including tags stored as ID3 inside the WAV. It also re-reads files it couldn't read before.
+- Songs with no title or artist tags but named "Artist - Title" now use those names.
+- **This fix is in the PC agent:** update Signal Agent from Settings → PC sync. The library refreshes on its own after that.
+
 ## [1.0.66] - 2026-10-15
 
 - **Signal knows when it's on a tablet.** Wording like "Choose folders on this phone" now says "tablet" on a tablet. A Galaxy Z Fold still counts as a phone, even unfolded.

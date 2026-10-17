@@ -1,7 +1,7 @@
 // Media metadata extraction (music-metadata, optionally ffprobe) and sidecar discovery.
 import path from 'node:path';
 import fsp from 'node:fs/promises';
-import { parseFile } from 'music-metadata';
+import { parseFile, parseBuffer } from 'music-metadata';
 import { hasExecutable, run, IMAGE_EXTS } from './util.js';
 import { embeddedToLines, detectLanguage, parseLrc } from './lyrics.js';
 
@@ -38,7 +38,32 @@ function splitGenres(list) {
 
 /** Extract audio metadata for the catalogue cache. */
 export async function readAudioMeta(abs) {
-  const mm = await parseFile(abs, { skipCovers: false, duration: false });
+  const isWav = /\.wav$/i.test(abs);
+  let mm;
+  try {
+    mm = await parseFile(abs, { skipCovers: false, duration: false });
+  } catch (e) {
+    if (!isWav) throw e;
+  }
+  // WAV files edited by different tools are often slightly malformed (wrong sizes, unpadded chunks), which
+  // stops the regular reader. A forgiving reader fills in whatever it missed.
+  if (isWav && (!mm || !mm.common.title || !mm.common.album || !mm.common.track?.no || !mm.format.duration)) {
+    const w = await readWavLoose(abs).catch(() => null);
+    if (w) {
+      if (!mm) mm = { common: {}, format: {} };
+      const c = mm.common;
+      c.title ||= w.title; c.artist ||= w.artist; c.album ||= w.album; c.albumartist ||= w.albumArtist;
+      if (!c.track?.no && w.track) c.track = { no: w.track, of: null };
+      if (!c.year && w.year) c.year = w.year;
+      if ((!c.genre || !c.genre.length) && w.genre) c.genre = [w.genre];
+      if ((!c.picture || !c.picture.length) && w.picture) c.picture = [w.picture];
+      const f = mm.format;
+      f.duration ||= w.duration; f.sampleRate ||= w.sampleRate; f.bitsPerSample ||= w.bitsPerSample;
+      f.codec ||= 'PCM'; f.lossless ??= true;
+    } else if (!mm) {
+      throw new Error('unreadable WAV file');
+    }
+  }
   const { common, format } = mm;
   let embeddedLang = null;
   const emb = embeddedToLines(common.lyrics);
@@ -240,5 +265,89 @@ export async function lrcLanguage(abs) {
     return p.lang || detectLanguage(p.lines.map((l) => l.text).join('\n'));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Reads a WAV file's format and tags while tolerating the usual damage: a wrong RIFF size, chunks without their
+ * padding byte, a data size of 0 or 0xFFFFFFFF. Tags come from LIST/INFO and from an embedded ID3 ("id3 ") chunk.
+ */
+export async function readWavLoose(abs) {
+  const fh = await fsp.open(abs, 'r');
+  try {
+    const { size } = await fh.stat();
+    const read = async (pos, len) => {
+      const b = Buffer.alloc(Math.max(0, Math.min(len, size - pos)));
+      if (b.length) await fh.read(b, 0, b.length, pos);
+      return b;
+    };
+    const head = await read(0, 12);
+    if (head.length < 12 || head.toString('latin1', 0, 4) !== 'RIFF' || head.toString('latin1', 8, 12) !== 'WAVE') return null;
+    const out = {};
+    let byteRate = 0; let dataSize = 0;
+    let pos = 12;
+    for (let guard = 0; pos + 8 <= size && guard < 10000; guard++) {
+      const h = await read(pos, 8);
+      const id = h.toString('latin1', 0, 4);
+      let len = h.readUInt32LE(4);
+      if (!/^[\x20-\x7e]{4}$/.test(id)) {
+        // Lost the chunk boundary (an unpadded odd chunk before this one): step back one byte and retry once.
+        if (pos > 12) { pos -= 1; const h2 = await read(pos, 8); if (/^[\x20-\x7e]{4}$/.test(h2.toString('latin1', 0, 4))) continue; pos += 1; }
+        break;
+      }
+      const body = pos + 8;
+      const left = size - body;
+      if (id === 'data') {
+        dataSize = len === 0 || len === 0xffffffff || len > left ? left : len;
+        len = dataSize;
+      } else if (len > left) len = left;
+      if (id === 'fmt ') {
+        const f = await read(body, Math.min(len, 40));
+        if (f.length >= 16) {
+          out.sampleRate = f.readUInt32LE(4);
+          byteRate = f.readUInt32LE(8);
+          out.bitsPerSample = f.readUInt16LE(14);
+        }
+      } else if (id === 'LIST' && len <= 4 * 1024 * 1024) {
+        const l = await read(body, len);
+        if (l.toString('latin1', 0, 4) === 'INFO') readInfo(l.subarray(4), out);
+      } else if ((id === 'id3 ' || id === 'ID3 ') && len <= 32 * 1024 * 1024) {
+        const tag = await read(body, len);
+        const mm = await parseBuffer(tag, { mimeType: 'audio/mpeg' }, { skipCovers: false, duration: false }).catch(() => null);
+        if (mm) {
+          const c = mm.common;
+          out.title ||= c.title; out.artist ||= c.artist; out.album ||= c.album; out.albumArtist ||= c.albumartist;
+          out.track ||= c.track?.no; out.year ||= c.year; out.genre ||= c.genre?.[0];
+          if (c.picture?.length) out.picture = c.picture[0];
+        }
+      }
+      pos = body + len + (len % 2);
+    }
+    if (byteRate && dataSize) out.duration = dataSize / byteRate;
+    return out;
+  } finally {
+    await fh.close();
+  }
+}
+
+function readInfo(buf, out) {
+  const names = { INAM: 'title', IART: 'artist', IPRD: 'album', IALB: 'album', ITRK: 'track', IPRT: 'track', TRCK: 'track', ICRD: 'year', IGNR: 'genre', IAAR: 'albumArtist' };
+  let p = 0;
+  while (p + 8 <= buf.length) {
+    const id = buf.toString('latin1', p, p + 4);
+    let len = buf.readUInt32LE(p + 4);
+    if (!/^[\x20-\x7e]{4}$/.test(id)) {
+      if (p > 0 && /^[\x20-\x7e]{4}$/.test(buf.toString('latin1', p - 1, p + 3))) { p -= 1; continue; }
+      break;
+    }
+    len = Math.min(len, buf.length - p - 8);
+    const text = buf.toString('utf8', p + 8, p + 8 + len).replace(/\0+$/g, '').trim();
+    const key = names[id];
+    if (key && text) {
+      if (key === 'track') out.track ||= parseInt(text, 10) || undefined;
+      else if (key === 'year') out.year ||= parseInt(text.slice(0, 4), 10) || undefined;
+      else out[key] ||= text;
+    }
+    p += 8 + len + (len % 2);
   }
 }
