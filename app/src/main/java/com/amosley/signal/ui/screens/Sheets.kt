@@ -188,6 +188,8 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
             remote = runCatching { c.repo.agent.suggest(base, pc.token, t.id, c.st.stylePrompt) }.getOrNull()
         }
     }
+    // Unsaved changes in the song details: "Done" saves them instead of throwing them away.
+    val pending = remember(trackId) { mutableStateOf<com.amosley.signal.data.TrackEdit?>(null) }
     val suggestions = remote ?: ArtistSuggester.suggest(t, c.lib.tracks, lyrics, c.st.stylePrompt)
     val existing = c.lib.artists.map { it.first }.toSet()
     Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -197,10 +199,16 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
             Text(t.title, style = T.rowSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Mono(listOfNotNull(t.album, t.bitsLabel).joinToString(" · "), style = T.metaMono, color = C.Faint)
         }
-        Mono("Done", color = C.Fg, style = T.mono(11.sp, 600), modifier = Modifier.clickable { c.st.sheet = null }.padding(4.dp))
+        Mono("Done", color = C.Fg, style = T.mono(11.sp, 600), modifier = Modifier.clickable {
+            pending.value?.let { e ->
+                c.repo.editTrack(t, e)
+                c.toast(if (t.origin == Origin.PC) "Saved · writing tags on ${c.pcName}" else "Saved")
+            }
+            c.st.sheet = null
+        }.padding(4.dp))
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        TagFields(c, t)
+        TagFields(c, t, pending)
         Spacer(Modifier.height(20.dp))
         Mono("Artist", color = C.Muted)
         Spacer(Modifier.height(6.dp))
@@ -260,7 +268,7 @@ private fun ColumnScope.EditSheet(c: Ctx, trackId: String) {
 
 /** Title / album / genre / year / track editor. Only changed fields are saved (and written to PC files). */
 @Composable
-private fun TagFields(c: Ctx, t: com.amosley.signal.core.Track) {
+private fun TagFields(c: Ctx, t: com.amosley.signal.core.Track, pending: androidx.compose.runtime.MutableState<com.amosley.signal.data.TrackEdit?>) {
     var title by remember(t.id) { mutableStateOf(t.title) }
     var artist by remember(t.id) { mutableStateOf(t.artist.orEmpty()) }
     var album by remember(t.id) { mutableStateOf(t.album.orEmpty()) }
@@ -277,6 +285,7 @@ private fun TagFields(c: Ctx, t: com.amosley.signal.core.Track) {
         year = changedInt(year, t.year), track = changedInt(track, t.track), disc = changedInt(disc, t.disc),
     )
     val dirty = edit != com.amosley.signal.data.TrackEdit()
+    androidx.compose.runtime.SideEffect { pending.value = if (dirty) edit else null }
     Mono("Song details", color = C.Muted)
     Spacer(Modifier.height(8.dp))
     LabeledField("Title", title) { title = it }

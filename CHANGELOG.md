@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.69] - 2026-10-17
+
+- **"Done" saves your song edits.** In a song's edit screen, changes to the title, artist, album, track number and so on were saved only by the "Save changes" button lower down, often hidden behind the keyboard. "Done" at the top closed the screen and threw them away. Done now saves any changes you made (and writes them to the file on the PC).
+
 ## [1.0.68] - 2026-10-17
 
 - **"Later" hides the new-files banner.** Tapping Later on the new-files review closed the review but left the "7 new files" banner in Recently Added. Now Later hides it for those files, which stay under the "+7 new" button at the top for whenever you want to review them. The banner comes back only when more new files arrive.
