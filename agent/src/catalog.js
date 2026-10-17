@@ -29,7 +29,7 @@ const IO_SLOTS = 8;
 const IO_SLOTS_STREAMING = 1;
 const META_TIMEOUT_MS = 30000;
 // Bumped when tag reading improves, so files that failed before are read again.
-const META_VERSION = 2;
+const META_VERSION = 3;
 function withTimeout(promise, ms, message) {
   let t;
   return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(message)), ms); t.unref?.(); })]).finally(() => clearTimeout(t));
@@ -328,7 +328,8 @@ export class Catalog {
     const mtime = Math.round(st.mtimeMs);
     let entry;
     // Files this agent couldn't read before (e.g. damaged WAVs) are read again, since newer agents read more.
-    const weakWav = /\.wav$/i.test(f.abs) && cached?.meta && (!cached.meta.durationMs || !cached.meta.title);
+    const weakWav = /\.wav$/i.test(f.abs) && cached?.meta && (!cached.meta.durationMs || !cached.meta.title
+      || /\uFFFD/.test(`${cached.meta.title}${cached.meta.artist}${cached.meta.album}`));
     const retry = (cached?.meta?.error || weakWav) && cached.metaVersion !== META_VERSION;
     if (cached && cached.mtime === mtime && cached.size === st.size && cached.meta && !retry) {
       entry = { ...cached };

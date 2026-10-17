@@ -394,7 +394,7 @@ fun LazyListScope.songRows(c: Ctx, list: List<Track>, key: String) {
 
 private fun LazyListScope.recent(c: Ctx, albumCols: Int) {
     val cand = importCandidates(c)
-    if (cand.isNotEmpty()) item {
+    if (cand.any { it.addedAt > c.settings.importLaterAt }) item {
         Box(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp)) {
             CardBox {
                 Row(verticalAlignment = Alignment.CenterVertically) {

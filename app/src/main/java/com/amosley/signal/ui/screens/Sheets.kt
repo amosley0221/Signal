@@ -358,7 +358,12 @@ private fun ColumnScope.BatchSheet(c: Ctx) {
 private fun ColumnScope.ImportSheet(c: Ctx) {
     val files = importCandidates(c)
     val idx = c.st.importIdx.value
-    SheetHeader("${files.size} new file${if (files.size != 1) "s" else ""} from ${c.pcName}", "Review artists before adding", "Later", { c.st.sheet = null })
+    SheetHeader("${files.size} new file${if (files.size != 1) "s" else ""} from ${c.pcName}", "Review artists before adding", "Later", {
+        // Hide the banner for these files; they stay under "+N new" at the top, and new files bring it back.
+        val newest = files.maxOfOrNull { it.addedAt } ?: 0L
+        c.repo.updateSettings { it.copy(importLaterAt = maxOf(it.importLaterAt, newest)) }
+        c.st.sheet = null
+    })
     val picks = files.map { f ->
         val sg = ArtistSuggester.suggest(f, c.lib.tracks, c.repo.cachedLyrics(f.id)?.lines)
         val i = (idx[f.id] ?: 0) % sg.size

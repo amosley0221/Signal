@@ -47,11 +47,17 @@ export async function readAudioMeta(abs) {
   }
   // WAV files edited by different tools are often slightly malformed (wrong sizes, unpadded chunks), which
   // stops the regular reader. A forgiving reader fills in whatever it missed.
-  if (isWav && (!mm || !mm.common.title || !mm.common.album || !mm.common.track?.no || !mm.format.duration)) {
+  const garbled = (v) => typeof v === 'string' && v.includes('\uFFFD');
+  if (isWav && (!mm || !mm.common.title || !mm.common.album || !mm.common.track?.no || !mm.format.duration
+    || garbled(mm.common.title) || garbled(mm.common.artist) || garbled(mm.common.album))) {
     const w = await readWavLoose(abs).catch(() => null);
     if (w) {
       if (!mm) mm = { common: {}, format: {} };
       const c = mm.common;
+      // Text the regular reader garbled ("�" from Windows-1252 accents) is replaced by the forgiving reader's.
+      for (const [k, wk] of [['title', 'title'], ['artist', 'artist'], ['album', 'album'], ['albumartist', 'albumArtist']]) {
+        if (typeof c[k] === 'string' && c[k].includes('\uFFFD') && w[wk]) c[k] = w[wk];
+      }
       c.title ||= w.title; c.artist ||= w.artist; c.album ||= w.album; c.albumartist ||= w.albumArtist;
       if (!c.track?.no && w.track) c.track = { no: w.track, of: null };
       if (!c.year && w.year) c.year = w.year;
@@ -341,7 +347,7 @@ function readInfo(buf, out) {
       break;
     }
     len = Math.min(len, buf.length - p - 8);
-    const text = buf.toString('utf8', p + 8, p + 8 + len).replace(/\0+$/g, '').trim();
+    const text = decodeText(buf.subarray(p + 8, p + 8 + len)).replace(/\0+$/g, '').trim();
     const key = names[id];
     if (key && text) {
       if (key === 'track') out.track ||= parseInt(text, 10) || undefined;
@@ -349,5 +355,14 @@ function readInfo(buf, out) {
       else out[key] ||= text;
     }
     p += 8 + len + (len % 2);
+  }
+}
+
+/** Tag text: UTF-8 when it is valid UTF-8, otherwise Windows-1252/Latin-1 (what Windows writes, e.g. "¿"). */
+export function decodeText(b) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(b);
+  } catch {
+    return Buffer.from(b).toString('latin1');
   }
 }

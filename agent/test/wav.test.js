@@ -27,3 +27,9 @@ test('reads tags and length from damaged WAV files', async () => {
   assert.equal(m.track, 31);
   assert.equal(m.durationMs, 2000);
 });
+
+test('Windows-1252 accents in WAV tags read correctly', async () => {
+  const { decodeText } = await import('../src/media.js');
+  assert.equal(decodeText(Buffer.from([0xbf, 0x44, 0x75, 0x65, 0x72, 0x6d, 0x65, 0x73])), '¿Duermes');
+  assert.equal(decodeText(Buffer.from('¿Duermes', 'utf8')), '¿Duermes');
+});

@@ -43,6 +43,8 @@ data class Settings(
     val recentSearches: List<String> = emptyList(),
     /** PC tracks added after this time with no artist show up in Import review. */
     val importReviewedAt: Long = 0,
+    /** "Later" on the new-files review: hide the banner for files added up to this time (the "+N new" button stays). */
+    val importLaterAt: Long = 0,
     /** Phone folder → what it holds. Folders not in the map are hidden from the library. */
     val phoneFolders: Map<String, PhoneFolderType> = emptyMap(),
     /** False until the user has chosen phone folders (the library prompts them to). */

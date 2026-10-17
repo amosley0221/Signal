@@ -3,6 +3,11 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.68] - 2026-10-17
+
+- **"Later" hides the new-files banner.** Tapping Later on the new-files review closed the review but left the "7 new files" banner in Recently Added. Now Later hides it for those files, which stay under the "+7 new" button at the top for whenever you want to review them. The banner comes back only when more new files arrive.
+- **Accented characters in WAV tags show properly** (PC agent). Tags written by Windows use its own character set, so "¿Duermes O Piensas En Los Dos?" showed as "�Duermes…". The agent now reads those characters correctly and re-reads affected files. Update Signal Agent from Settings → PC sync.
+
 ## [1.0.67] - 2026-10-17
 
 - **WAV files show their real artist, album, track number and length.** Some WAV files are slightly malformed (wrong sizes or unpadded sections, which some editing tools leave behind). The PC agent couldn't read them at all, so they showed the file name, the folder name as the album, no track number and 0:00. The agent now reads these files in a more forgiving way, including tags stored as ID3 inside the WAV. It also re-reads files it couldn't read before.
