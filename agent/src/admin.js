@@ -106,6 +106,17 @@ export function adminPage() {
     <div class="msg" id="saveMsg"></div>
   </div>
 
+  <h2>Movie &amp; TV details</h2>
+  <div class="card block">
+    <p class="muted" id="metaStatus"></p>
+    <p class="muted">With a free TMDB key, Signal gets posters, summaries, cast and episode titles by itself, without Plex. On themoviedb.org: <b>Settings → API</b>, then copy the <b>API Key</b> or the <b>API Read Access Token</b>.</p>
+    <label class="field" for="tmdbKey">TMDB key</label>
+    <input type="password" id="tmdbKey" autocomplete="off" placeholder="Paste your key" style="width:100%;max-width:520px">
+    <label style="display:block;margin-top:10px"><input type="checkbox" id="preferTmdb"> Prefer TMDB's details over Plex's</label>
+    <div class="row" style="margin-top:12px"><button id="saveMeta" class="primary">Save</button></div>
+    <div class="msg" id="metaMsg"></div>
+  </div>
+
   <h2>Start with Windows</h2>
   <div class="card block">
     <label class="switch"><input type="checkbox" id="startup"> <span>Start Signal Agent automatically when I sign in to this PC</span></label>
@@ -220,6 +231,32 @@ $('save').onclick = async () => {
     if (errs.some((e) => String(e.field).startsWith('plex'))) $('plexBox').open = true;
   }
 };
+
+async function loadMeta() {
+  let m;
+  try { m = await (await fetch('/admin/metadata', { headers: H })).json(); } catch { return; }
+  $('metaStatus').textContent = m.tmdb ? 'TMDB is on.' + (m.plex ? (m.prefer === 'tmdb' ? ' TMDB details win over Plex.' : ' Plex details win when Plex has the title.') : '') : 'TMDB is off: add a key below.';
+  $('preferTmdb').checked = m.prefer === 'tmdb';
+  $('tmdbKey').placeholder = m.tmdb ? 'Key saved · paste a new one to change it' : 'Paste your key';
+}
+$('saveMeta').onclick = async () => {
+  const btn = $('saveMeta'); btn.disabled = true;
+  $('metaMsg').className = 'msg'; $('metaMsg').textContent = 'Checking with TMDB…';
+  const body = { prefer: $('preferTmdb').checked ? 'tmdb' : 'plex' };
+  if ($('tmdbKey').value.trim()) body.tmdbKey = $('tmdbKey').value.trim();
+  const r = await post('/admin/metadata', body);
+  btn.disabled = false;
+  if (r.ok) {
+    $('tmdbKey').value = '';
+    $('metaMsg').className = 'msg ok';
+    $('metaMsg').textContent = 'Saved. Details fill in over the next minute; then tap Sync now in Signal.';
+    loadMeta();
+  } else {
+    $('metaMsg').className = 'msg bad';
+    $('metaMsg').textContent = r.message || 'Could not save (' + (r.error || r.status) + ').';
+  }
+};
+loadMeta();
 
 // ---- folder picker ------------------------------------------------------------------------------
 let pick = { path: '', parent: null, done: null };

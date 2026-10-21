@@ -374,6 +374,12 @@ export function createServer(agent) {
     agent.catalog.scan('admin page').catch(() => {});
     sendJson(req, res, 200, { ok: true });
   });
+  admin('GET', '/admin/metadata', (req, res) => sendJson(req, res, 200, agent.metadataSettings()));
+  admin('POST', '/admin/metadata', async (req, res) => {
+    const body = await readJson(req);
+    const r = await agent.setMetadata({ tmdbKey: body.tmdbKey, prefer: body.prefer });
+    sendJson(req, res, r.ok ? 200 : 400, r);
+  });
   admin('GET', '/admin/setup', (req, res) => sendJson(req, res, 200, agent.setupState()));
   admin('POST', '/admin/setup', async (req, res) => {
     const body = await readJson(req);

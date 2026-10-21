@@ -104,3 +104,14 @@ test('a bad TMDB key is refused', async () => {
   assert.equal(r.status, 400);
   assert.match((await r.json()).message, /rejected/);
 });
+
+test('the PC admin page can set the TMDB key too', async () => {
+  const H = { 'X-Signal-Admin': '1', 'Content-Type': 'application/json' };
+  assert.match(await (await realFetch(`${base}/`)).text(), /Movie &amp; TV details/);
+  const bad = await realFetch(`${base}/admin/metadata`, { method: 'POST', headers: H, body: JSON.stringify({ tmdbKey: 'wrong' }) });
+  assert.equal(bad.status, 400);
+  globalThis.fetch = async (u, o) => (new URL(String(u)).hostname === 'api.themoviedb.org' ? { ok: true, status: 200, json: async () => ({}) } : realFetch(u, o));
+  const ok = await realFetch(`${base}/admin/metadata`, { method: 'POST', headers: H, body: JSON.stringify({ tmdbKey: 'key123', prefer: 'tmdb' }) });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await (await realFetch(`${base}/admin/metadata`, { headers: H })).json(), { tmdb: true, plex: false, prefer: 'tmdb' });
+});

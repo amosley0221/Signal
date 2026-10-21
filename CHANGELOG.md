@@ -3,6 +3,10 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.71] - 2026-10-21
+
+- **TMDB key on the PC too.** The Signal Agent window on your PC now has a "Movie & TV details" section. Paste your TMDB key there and choose whether TMDB's details win over Plex's. You can still do the same from the phone in Settings → PC sync. Update Signal Agent to get it.
+
 ## [1.0.70] - 2026-10-21
 
 First step toward Signal replacing Plex: the PC agent can now get movie and TV details by itself. Plex becomes optional.
