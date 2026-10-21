@@ -34,6 +34,10 @@ val SignalJson = Json {
 @Serializable data class ActivityItem(val id: String, val kind: String, val title: String, val detail: String? = null, val state: String, val progress: Double? = null)
 @Serializable data class AgentUpdate(val current: String? = null, val latest: String? = null, val available: Boolean = false, val notes: String? = null)
 @Serializable data class TagResult(val ok: Boolean = false, val mtime: Long? = null, val error: String? = null, val pcArtist: String? = null)
+@Serializable data class MetadataSettings(val tmdb: Boolean = false, val plex: Boolean = false, val prefer: String = "plex", val ok: Boolean = true, val message: String? = null)
+@Serializable data class MatchResult(val tmdbId: Long, val title: String, val year: Int? = null, val summary: String? = null, val posterUrl: String? = null)
+@Serializable private data class MetadataBody(val tmdbKey: String? = null, val prefer: String? = null)
+@Serializable private data class MatchBody(val tmdbId: Long?)
 @Serializable private data class ApiSuggestion(val name: String, val why: String, val kind: String)
 @Serializable private data class PairStartBody(val deviceName: String)
 @Serializable private data class TagBody(val artist: String, val baseMtime: Long, val force: Boolean = false)
@@ -90,6 +94,39 @@ class AgentClient(private val http: OkHttpClient) {
 
     suspend fun saveLyrics(base: String, token: String, id: String, lrc: String) {
         call(base, "/api/lyrics/$id", token, SignalJson.encodeToString(LyricsBody.serializer(), LyricsBody(lrc)).toRequestBody(jsonType))
+    }
+
+    /** Movie & TV details settings (agent 1.0.70+; older agents return 404). */
+    suspend fun metadata(base: String, token: String): MetadataSettings = SignalJson.decodeFromString(call(base, "/api/metadata", token, timeoutSec = 10))
+
+    /** Saves the TMDB key and/or preference. A rejected key comes back with ok=false and a message. */
+    suspend fun setMetadata(base: String, token: String, tmdbKey: String?, prefer: String?): MetadataSettings {
+        val body = SignalJson.encodeToString(MetadataBody.serializer(), MetadataBody(tmdbKey, prefer)).toRequestBody(jsonType)
+        return try {
+            SignalJson.decodeFromString(call(base, "/api/metadata", token, body, timeoutSec = 30))
+        } catch (e: AgentException) {
+            if (e.code != 400) throw e
+            val msg = Regex("\"message\"\\s*:\\s*\"([^\"]*)\"").find(e.message.orEmpty())?.groupValues?.get(1)
+            MetadataSettings(ok = false, message = msg ?: "That key didn't work")
+        }
+    }
+
+    /** "Fix match" search on TMDB through the agent. kind is "movie" or "tv". */
+    suspend fun matchSearch(base: String, token: String, kind: String, query: String, year: Int?): List<MatchResult> {
+        val url = (base.trimEnd('/') + "/api/match/search").toHttpUrl().newBuilder()
+            .addQueryParameter("kind", kind).addQueryParameter("q", query)
+            .apply { if (year != null) addQueryParameter("year", year.toString()) }.build()
+        val text = withContext(Dispatchers.IO) {
+            http.newBuilder().callTimeout(30, TimeUnit.SECONDS).build()
+                .newCall(Request.Builder().url(url).header("Authorization", "Bearer $token").build())
+                .execute().use { if (it.code == 409) throw AgentException(409, "Add a TMDB key in Settings → PC sync first") else it.bodyOrThrow() }
+        }
+        return SignalJson.decodeFromString(text)
+    }
+
+    /** Pins a movie or show to a TMDB id (null goes back to automatic). */
+    suspend fun setMatch(base: String, token: String, id: String, tmdbId: Long?) {
+        call(base, "/api/match/$id", token, SignalJson.encodeToString(MatchBody.serializer(), MatchBody(tmdbId)).toRequestBody(jsonType), timeoutSec = 30)
     }
 
     suspend fun activity(base: String, token: String): List<ActivityItem> = SignalJson.decodeFromString(call(base, "/api/activity", token))

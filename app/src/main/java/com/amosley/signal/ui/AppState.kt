@@ -60,6 +60,8 @@ sealed interface Sheet {
     data class Art(val album: String?, val artist: String?) : Sheet
     /** Search online details for a phone movie (movieId) or phone show (showKey = its id). */
     data class FixMatch(val movieId: String?, val showKey: String?) : Sheet
+    /** Pick the right TMDB title for a movie or show on the PC (agent 1.0.70+). kind is "movie" or "tv". */
+    data class PcFixMatch(val id: String, val kind: String, val title: String, val year: Int?) : Sheet
 }
 
 /** UI navigation state. Library data lives in the Repository; playback in PlayerHub. */

@@ -127,7 +127,7 @@ fun Context.findActivity(): Activity? {
 // ---- Movie detail -------------------------------------------------------------------------------
 
 @Composable
-private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: String?, phoneFix: (() -> Unit)? = null) {
+private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: String?, phoneFix: (() -> Unit)? = null, pcFix: (() -> Unit)? = null) {
     Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         certificate?.let { Chip(it, bg = Color.Transparent, fg = C.Fg, border = C.HairStrong) }
         rating?.let { Chip("★ ${"%.1f".format(it)}", bg = C.AmberTint, fg = C.AmberText) }
@@ -142,9 +142,7 @@ private fun MetaRow(c: Ctx, certificate: String?, rating: Double?, matchedBy: St
         when {
             phoneFix != null -> Mono(if (matchedBy == "ON THIS PHONE") "Find details" else "Wrong title? Fix match", style = T.metaMono, color = C.AmberText,
                 modifier = Modifier.clickable(onClick = phoneFix))
-            matchedBy != null && matchedBy.startsWith("PLEX") -> Mono("Wrong title? Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable {
-                c.toast("Use Fix Match on this title in Plex, then Sync now in Signal")
-            })
+            pcFix != null -> Mono("Wrong title? Fix match", style = T.metaMono, color = C.AmberText, modifier = Modifier.clickable(onClick = pcFix))
         }
     }
 }
@@ -223,7 +221,8 @@ fun MovieScreen(c: Ctx, id: String) {
                 }
                 Spacer(Modifier.height(16.dp))
                 MetaRow(c, m.certificate, m.rating, m.matchedBy,
-                    phoneFix = if (m.id.startsWith("locv:")) ({ c.st.sheet = Sheet.FixMatch(movieId = m.id, showKey = null) }) else null)
+                    phoneFix = if (m.id.startsWith("locv:")) ({ c.st.sheet = Sheet.FixMatch(movieId = m.id, showKey = null) }) else null,
+                    pcFix = { c.st.sheet = Sheet.PcFixMatch(m.id, "movie", m.title, m.year) })
                 m.synopsis?.let {
                     Spacer(Modifier.height(14.dp))
                     Text(it, style = T.ui(14.5.sp, lineHeight = 22.sp), color = C.Fg.copy(alpha = 0.85f))
@@ -272,7 +271,8 @@ fun ShowScreen(c: Ctx, id: String) {
                 }
                 Spacer(Modifier.height(16.dp))
                 MetaRow(c, show.certificate, show.rating, show.matchedBy,
-                    phoneFix = if (show.id.startsWith("locs:")) ({ c.st.sheet = Sheet.FixMatch(movieId = null, showKey = show.id) }) else null)
+                    phoneFix = if (show.id.startsWith("locs:")) ({ c.st.sheet = Sheet.FixMatch(movieId = null, showKey = show.id) }) else null,
+                    pcFix = { c.st.sheet = Sheet.PcFixMatch(show.id, "tv", show.title, show.year) })
                 show.synopsis?.let {
                     Spacer(Modifier.height(12.dp))
                     Text(it, style = T.ui(14.5.sp, lineHeight = 22.sp), color = C.Fg.copy(alpha = 0.85f))

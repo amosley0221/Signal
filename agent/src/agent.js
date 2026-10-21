@@ -1,4 +1,8 @@
 // The Agent: wires config, state, catalogue, Plex, HTTP server, mDNS and periodic rescans together.
+import { Tmdb } from './tmdb.js';
+import { ensureFfmpeg } from './ffmpeg.js';
+import { setToolDir } from './util.js';
+import { saveMetadataSettings } from './config.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { State } from './state.js';
@@ -31,13 +35,15 @@ export class Agent {
     this.startup = this.opts.startup || new StartupEntry({ command: launchCommand({ packaged: isPackaged(), configOverride: configOverride() }) });
     this.reconfiguring = Promise.resolve();
     fs.mkdirSync(config.dataDir, { recursive: true });
+    setToolDir(path.join(config.dataDir, 'bin'));
     this.logPath = path.join(config.dataDir, 'agent.log');
     this.logFile = this.opts.logFile ? logFileFor(this.logPath) : null;
     this.log = this.log.bind(this);
     this.state = new State(config.dataDir, this.log);
     this.activity = new Activity();
     this.plex = this.#makePlex(config);
-    this.catalog = new Catalog({ config, state: this.state, activity: this.activity, plex: this.plex, log: this.log });
+    this.tmdb = this.#makeTmdb(config);
+    this.catalog = new Catalog({ config, state: this.state, activity: this.activity, plex: this.plex, meta: this.tmdb, log: this.log });
     this.server = null;
     this.port = null;
     this.bonjour = null;
@@ -64,6 +70,37 @@ export class Agent {
         this.log(`[pair] denied "${ev.req.deviceName}"`);
       }
     });
+  }
+
+  #makeTmdb(config) {
+    if (!config.tmdb?.key) return null;
+    // Details arrive in the background; the next catalog request rebuilds with them.
+    return new Tmdb({ key: config.tmdb.key, dataDir: config.dataDir, log: this.log, onChange: () => { if (this.catalog) this.catalog.dirty = true; } });
+  }
+
+  /** Movie & TV details settings, as the phone shows them. */
+  metadataSettings() {
+    return { tmdb: !!this.tmdb, plex: !!this.plex, prefer: this.config.metadata?.prefer || 'plex' };
+  }
+
+  /**
+   * Set the TMDB key (checked first) and/or whether TMDB's details win over Plex's. Applied right away, without
+   * rescanning: the next catalog request has the new details. Returns {ok} or {ok:false, message}.
+   */
+  async setMetadata({ tmdbKey, prefer }) {
+    if (tmdbKey !== undefined && tmdbKey) {
+      const t = await Tmdb.test(tmdbKey);
+      if (!t.ok) return t;
+    }
+    if (this.config.configPath) saveMetadataSettings(this.config.configPath, { tmdbKey, prefer });
+    if (tmdbKey !== undefined) this.config.tmdb = { key: String(tmdbKey || '').trim() };
+    if (prefer !== undefined) this.config.metadata = { prefer: prefer === 'tmdb' ? 'tmdb' : 'plex' };
+    this.tmdb = this.#makeTmdb(this.config);
+    this.catalog.meta = this.tmdb;
+    this.catalog.preferOwn = this.config.metadata?.prefer === 'tmdb';
+    this.catalog.dirty = true;
+    this.log(`[metadata] TMDB ${this.tmdb ? 'on' : 'off'} · ${this.catalog.preferOwn ? 'TMDB details first' : 'Plex details first'}`);
+    return { ok: true, ...this.metadataSettings() };
   }
 
   #makePlex(config) {
@@ -162,7 +199,8 @@ export class Agent {
     await this.catalog.cancelScan();
     this.config = next;
     this.plex = this.#makePlex(next);
-    this.catalog = new Catalog({ config: next, state: this.state, activity: this.activity, plex: this.plex, log: this.log });
+    this.tmdb = this.#makeTmdb(next);
+    this.catalog = new Catalog({ config: next, state: this.state, activity: this.activity, plex: this.plex, meta: this.tmdb, log: this.log });
     await this.catalog.init();
     this.log(`[config] settings saved — ${next.libraries.length} librar${next.libraries.length === 1 ? 'y' : 'ies'}${this.plex ? ', Plex on' : ''}`);
     if (this.opts.mdns && this.server && (old.name !== next.name || !!old.plex?.token !== !!next.plex?.token)) {
@@ -201,6 +239,12 @@ export class Agent {
       const first = this.catalog.scan('startup').catch((e) => this.log(`[scan] ${e.message}`));
       if (this.opts.watch) first.then(() => this.catalog.startWatching());
       this.initialScan = first;
+    }
+    // Video details without Plex need ffprobe: fetch ffmpeg once if the PC has none, then re-read videos.
+    if (this.opts.periodic) {
+      Promise.resolve(this.initialScan).then(() => ensureFfmpeg({ dataDir: this.config.dataDir, log: this.log, activity: this.activity }))
+        .then((installed) => { if (installed) this.catalog.scan('ffmpeg installed').catch(() => {}); })
+        .catch((e) => this.log(`[ffmpeg] ${e.message}`));
     }
     if (this.opts.periodic) {
       this.timer = setInterval(() => this.catalog.scan('periodic').catch(() => {}), RESCAN_INTERVAL_MS);

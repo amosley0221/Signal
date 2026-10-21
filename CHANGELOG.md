@@ -3,6 +3,16 @@
 Every release of Signal Player is listed here. The newest version is at the top.
 The GitHub release notes for each APK come from the matching section below.
 
+## [1.0.70] - 2026-10-21
+
+First step toward Signal replacing Plex: the PC agent can now get movie and TV details by itself. Plex becomes optional.
+
+- **Movie & TV details from TMDB.** Add a free TMDB key in Settings → PC sync → "Movie & TV details". Signal Agent then looks up posters, backdrops, summaries, ratings, cast and episode titles for your movies and shows, with or without Plex. Titles Plex already knows keep Plex's details unless you turn on "Prefer TMDB over Plex".
+- **Fix match works for PC movies and shows.** "Wrong title? Fix match" on a movie or show now opens a search on TMDB. Pick the right one and it's saved on the PC, so every device shows it. "Go back to automatic" undoes it.
+- **Plex watch history is kept.** Watched marks and resume points from Plex are copied into Signal's own history, so they stay if you stop using Plex.
+- **Video info without extra setup.** The Windows agent downloads ffmpeg by itself the first time, so video length, resolution and audio tracks are read for every file.
+- **These features are in the PC agent:** update Signal Agent from Settings → PC sync first.
+
 ## [1.0.69] - 2026-10-17
 
 - **"Done" saves your song edits.** In a song's edit screen, changes to the title, artist, album, track number and so on were saved only by the "Save changes" button lower down, often hidden behind the keyboard. "Done" at the top closed the screen and threw them away. Done now saves any changes you made (and writes them to the file on the PC).

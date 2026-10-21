@@ -47,6 +47,9 @@ export function defaultConfig() {
     dataDir: './data',
     libraries: [],
     plex: { url: '', token: '' },
+    // Signal's own movie/TV details. prefer: 'plex' uses Plex's details when Plex has the item; 'tmdb' always uses TMDB's.
+    tmdb: { key: '' },
+    metadata: { prefer: 'plex' },
   };
 }
 
@@ -149,6 +152,18 @@ export async function saveSetup(configPath, setup) {
   return cfg;
 }
 
+/** Save the TMDB key and/or the metadata preference into the config file (other settings are kept). */
+export function saveMetadataSettings(configPath, { tmdbKey, prefer }) {
+  let raw = {};
+  try { raw = JSON.parse(fs.readFileSync(configPath, 'utf8')) || {}; } catch { raw = defaultConfig(); }
+  if (tmdbKey !== undefined) raw.tmdb = { key: String(tmdbKey || '').trim() };
+  if (prefer !== undefined) raw.metadata = { prefer: prefer === 'tmdb' ? 'tmdb' : 'plex' };
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  const tmp = `${configPath}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(raw, null, 2)}\n`);
+  fs.renameSync(tmp, configPath);
+}
+
 /**
  * Normalise a raw config object. Relative `dataDir` / library paths resolve against `baseDir`
  * (the folder containing the config file).
@@ -161,6 +176,8 @@ export function normalizeConfig(raw, baseDir = AGENT_DIR) {
   c.host = c.host || '0.0.0.0';
   c.dataDir = path.resolve(baseDir, c.dataDir || d.dataDir);
   c.plex = { url: String(c.plex?.url || '').replace(/\/+$/, ''), token: String(c.plex?.token || '') };
+  c.tmdb = { key: String(c.tmdb?.key || '').trim() };
+  c.metadata = { prefer: c.metadata?.prefer === 'tmdb' ? 'tmdb' : 'plex' };
   const seen = new Set();
   c.libraries = (Array.isArray(c.libraries) ? c.libraries : []).map((l, i) => {
     let id = String(l.id || `l${i + 1}`);

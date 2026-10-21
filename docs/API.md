@@ -110,6 +110,17 @@ URLs in the catalogue are relative to the agent base URL; the app appends the to
 - `GET /api/activity` → `[{"id":"j1","kind":"scan|tag|upload|plex","title":"…","detail":"…","state":"queued|running|done|failed","progress":0.62}]`.
 - `POST /api/rescan` → `{"ok":true}` starts a library rescan.
 
+### Movie & TV details (agent 1.0.70+)
+- `GET /api/metadata` → `{"tmdb":true,"plex":false,"prefer":"plex|tmdb"}`. With a TMDB key the agent looks up
+  movies, shows and episodes itself (cached in `dataDir/tmdb.json`); `prefer:"tmdb"` makes those details win over Plex's.
+- `POST /api/metadata` body `{"tmdbKey":"…"}` and/or `{"prefer":"tmdb"}` → `200 {"ok":true,…settings}`, or
+  `400 {"ok":false,"message":"…"}` when TMDB rejects the key. An empty `tmdbKey` turns TMDB off.
+- `GET /api/match/search?kind=movie|tv&q=<title>&year=<year>` → `[{"tmdbId":603,"title":"The Matrix","year":1999,"summary":"…","posterUrl":"https://image.tmdb.org/…"}]`;
+  `409 {"error":"no_tmdb"}` without a key.
+- `POST /api/match/:id` (movie or show id) body `{"tmdbId":603}` pins that title ("Fix match"); `{}` goes back to automatic.
+- Watched state and resume points from Plex are copied into the agent's own progress the first time it sees them,
+  so they survive turning Plex off. Episode/movie art from TMDB is served through `/api/art/...` like Plex art.
+
 ### Updates
 - `GET /api/update` → `{"current":"1.0.4","latest":"1.0.5","available":true,"notes":"…","downloading":false,"error":null}`.
   Only the packaged Windows `SignalAgent.exe` updates itself; from source `available` is always `false`.

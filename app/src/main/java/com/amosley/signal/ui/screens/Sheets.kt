@@ -140,6 +140,7 @@ fun SheetHost(c: Ctx) {
                 is Sheet.NewPlaylist -> NewPlaylistSheet(c, sheet.trackId)
                 is Sheet.Art -> ArtSheet(c, sheet.album, sheet.artist)
                 is Sheet.FixMatch -> FixMatchSheet(c, sheet.movieId, sheet.showKey)
+                is Sheet.PcFixMatch -> PcFixMatchSheet(c, sheet)
                 is Sheet.Equalizer -> EqSheet(c)
                 is Sheet.ImportPlaylist -> ImportPlaylistSheet(c, sheet.link)
                 is Sheet.NowPlaying, is Sheet.LyricsEditor -> Unit

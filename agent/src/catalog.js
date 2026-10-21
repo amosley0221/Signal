@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import {
-  AUDIO_EXTS, VIDEO_EXTS, stableId, toPosix, writeJsonAtomic, readJsonSync, mapLimit, debounce, sanitizeFileName,
+  AUDIO_EXTS, VIDEO_EXTS, hasExecutable, stableId, toPosix, writeJsonAtomic, readJsonSync, mapLimit, debounce, sanitizeFileName,
 } from './util.js';
 import {
   readAudioMeta, readVideoMeta, findSidecars, showArt, lrcLanguage, containerFor, readEmbeddedCover, readEmbeddedLyrics,
@@ -39,11 +39,14 @@ export class Catalog {
   /**
    * @param {{config:any, state:import('./state.js').State, activity:import('./activity.js').Activity, plex:import('./plex.js').Plex|null, log:Function}} deps
    */
-  constructor({ config, state, activity, plex, log }) {
+  constructor({ config, state, activity, plex, log, meta = null }) {
     this.config = config;
     this.state = state;
     this.activity = activity;
     this.plex = plex && plex.enabled ? plex : null;
+    /** Signal's own movie/TV details (TMDB), used where Plex has none, or first when preferred. */
+    this.meta = meta && meta.enabled ? meta : null;
+    this.preferOwn = config.metadata?.prefer === 'tmdb';
     this.log = log || (() => {});
     this.cacheFile = path.join(config.dataDir, 'catalog.json');
     this.lastPublishAt = 0;
@@ -330,7 +333,9 @@ export class Catalog {
     // Files this agent couldn't read before (e.g. damaged WAVs) are read again, since newer agents read more.
     const weakWav = /\.wav$/i.test(f.abs) && cached?.meta && (!cached.meta.durationMs || !cached.meta.title
       || /\uFFFD/.test(`${cached.meta.title}${cached.meta.artist}${cached.meta.album}`));
-    const retry = (cached?.meta?.error || weakWav) && cached.metaVersion !== META_VERSION;
+    // A video read without ffprobe (length only, if that) is read again once ffprobe is available.
+    const basicVideo = f.kind === 'video' && cached?.meta && !cached.meta.fromPlex && cached.probe === 'basic' && (await hasExecutable('ffprobe'));
+    const retry = ((cached?.meta?.error || weakWav) && cached.metaVersion !== META_VERSION) || basicVideo;
     if (cached && cached.mtime === mtime && cached.size === st.size && cached.meta && !retry) {
       entry = { ...cached };
     } else {
@@ -347,7 +352,8 @@ export class Catalog {
         meta = { error: String(e.message || e) };
       }
       const birth = st.birthtimeMs > 0 ? Math.round(st.birthtimeMs) : mtime;
-      entry = { rel, kind: f.kind, mtime, size: st.size, addedAt: cached?.addedAt || Math.min(birth, Date.now()), meta, metaVersion: META_VERSION, _parsed: true };
+      const probe = f.kind === 'video' && !meta.fromPlex ? ((await hasExecutable('ffprobe')) ? 'ffprobe' : 'basic') : undefined;
+      entry = { rel, kind: f.kind, mtime, size: st.size, addedAt: cached?.addedAt || Math.min(birth, Date.now()), meta, metaVersion: META_VERSION, probe, _parsed: true };
     }
     const ownFolder = rel.includes('/');
     const side = findSidecars(f.name, listing || new Map(), role, ownFolder);
@@ -439,6 +445,26 @@ export class Catalog {
     return { viewOffsetMs: Math.max(0, Math.round(viewOffsetMs || 0)), watched, lastViewedAt };
   }
 
+  /**
+   * Copies what Plex knows you watched (finished, or stopped part-way) into Signal's own history, once per item,
+   * so Continue Watching and watched marks survive without Plex.
+   */
+  #importPlexHistory(index) {
+    if (!this.plex) return;
+    let added = 0;
+    for (const [id, it] of index) {
+      if (it.type !== 'movie' && it.type !== 'episode') continue;
+      const p = it.plex;
+      if (!p || (!p.watched && !(p.viewOffsetMs > 0)) || this.state.data.progress[id]) continue;
+      this.state.data.progress[id] = { positionMs: p.watched ? 0 : Math.round(p.viewOffsetMs), watched: !!p.watched, updatedAt: p.lastViewedAt || Date.now(), fromPlex: true };
+      added++;
+    }
+    if (added) {
+      this.state.saveSoon();
+      this.log(`[plex] copied watch history for ${added} item${added === 1 ? '' : 's'} into Signal`);
+    }
+  }
+
   build() {
     const index = new Map();
     const tracks = [];
@@ -499,8 +525,12 @@ export class Catalog {
           pendingVideos.push({ lib, rel, e, abs, parentName, baseName, fileName });
         } else if (role === 'movie') {
           const id = stableId(lib.id, rel);
-          const p = this.plex?.match(abs);
+          const pl = this.plex?.match(abs);
           const fn = parseMovieName(fileName, parentName || '');
+          const chosen = this.state.data.matches?.[id];
+          const tm = this.meta?.movieFor(fn.title || m.title, fn.year || m.year || null, chosen?.tmdbId) || null;
+          // A match picked in "Fix match", or Signal's own details when preferred, win over Plex's.
+          const p = chosen || this.preferOwn ? (tm || pl) : (pl || tm);
           const hasPoster = !!(p?.thumb || e.side?.art?.poster);
           const hasBackdrop = !!(p?.art || e.side?.art?.backdrop);
           const mv = {
@@ -517,14 +547,14 @@ export class Catalog {
             posterUrl: hasPoster ? `/api/art/${id}?kind=poster` : null,
             backdropUrl: hasBackdrop ? `/api/art/${id}?kind=backdrop` : null,
             matchedBy: p ? p.matchedBy : 'FILENAME',
-            ...this.#progressFor(id, p),
+            ...this.#progressFor(id, pl),
             width: m.width || null, height: m.height || null,
             container: containerFor(fileName), size: e.size, addedAt: e.addedAt,
             subtitles: (e.side?.subs || []).map((s) => ({ id: s.id, language: s.language, label: s.label, format: s.file.toLowerCase().endsWith('.vtt') ? 'vtt' : 'srt', url: `/api/subtitle/${id}/${s.id}` })),
             chapters: m.chapters || [],
           };
           movies.push(mv);
-          index.set(id, { type: 'movie', lib, abs, entry: e, item: mv, plex: p });
+          index.set(id, { type: 'movie', lib, abs, entry: e, item: mv, plex: pl, meta: p });
         } else if (role === 'episode') {
           const id = stableId(lib.id, rel);
           const p = this.plex?.match(abs);
@@ -553,7 +583,7 @@ export class Catalog {
             chapters: m.chapters || [],
           };
           sh.eps.push(ep);
-          index.set(id, { type: 'episode', lib, abs, entry: e, item: ep, plex: p, showId });
+          index.set(id, { type: 'episode', lib, abs, entry: e, item: ep, plex: p, meta: p, showId });
         }
       }
     }
@@ -602,7 +632,23 @@ export class Catalog {
     // shows
     const shows = [];
     for (const sh of showsMap.values()) {
-      const p = sh.plex;
+      const chosen = this.state.data.matches?.[sh.id];
+      const tm = this.meta?.showFor(sh.parsed.show, sh.parsed.showYear, chosen?.tmdbId) || null;
+      const p = chosen || this.preferOwn ? (tm || sh.plex) : (sh.plex || tm);
+      if (p && p === tm) {
+        // Episode titles, summaries and stills from TMDB (where Plex has none, or when TMDB is preferred).
+        for (const ep of sh.eps) {
+          const ix = index.get(ep.id);
+          if (ix?.plex && !chosen && !this.preferOwn) continue;
+          const te = this.meta.episodeFor(tm.tmdbId, ep.season, ep.episode);
+          if (!te) continue;
+          if (te.title) ep.title = te.title;
+          if (te.summary) ep.summary = te.summary;
+          if (!ep.durationMs && te.durationMs) ep.durationMs = te.durationMs;
+          if (te.thumb) ep.thumbUrl = `/api/art/${ep.id}?kind=thumb`;
+          if (ix) ix.meta = te;
+        }
+      }
       const seasons = new Map();
       sh.eps.sort((a, b) => (a.season - b.season) || ((a.episode ?? 1e9) - (b.episode ?? 1e9)) || a.title.localeCompare(b.title));
       for (const ep of sh.eps) {
@@ -627,7 +673,7 @@ export class Catalog {
         addedAt: Math.max(0, ...sh.eps.map((x) => x.addedAt || 0)) || null,
       };
       shows.push(show);
-      index.set(sh.id, { type: 'show', lib: sh.lib, abs: sh.folder ? path.join(sh.lib.path, sh.folder) : null, item: show, plex: p, sideArt: sh.sideArt });
+      index.set(sh.id, { type: 'show', lib: sh.lib, abs: sh.folder ? path.join(sh.lib.path, sh.folder) : null, item: show, plex: sh.plex, meta: p, sideArt: sh.sideArt });
     }
 
     for (const id of staleOverrides) this.state.clearOverride(id);
@@ -635,6 +681,7 @@ export class Catalog {
     movies.sort((a, b) => a.title.localeCompare(b.title));
     shows.sort((a, b) => a.title.localeCompare(b.title));
     this.index = index;
+    this.#importPlexHistory(index);
     // Plex's Continue Watching row, mapped to our ids (movies and episodes; several files of one movie all count).
     let continueWatching;
     if (this.plexContinue) {
@@ -749,14 +796,15 @@ export class Catalog {
       return sideFile(e.side?.art?.cover);
     }
     if (it.type === 'video') return sideFile(it.entry.side?.art?.thumb) || (it.plex?.thumb ? { plex: it.plex.thumb } : null);
+    const md = it.meta || it.plex;
     if (it.type === 'movie') {
-      if (kind === 'backdrop') return (it.plex?.art ? { plex: it.plex.art } : null) || sideFile(it.entry.side?.art?.backdrop);
-      return (it.plex?.thumb ? { plex: it.plex.thumb } : null) || sideFile(it.entry.side?.art?.poster);
+      if (kind === 'backdrop') return (md?.art ? { plex: md.art } : null) || sideFile(it.entry.side?.art?.backdrop);
+      return (md?.thumb ? { plex: md.thumb } : null) || sideFile(it.entry.side?.art?.poster);
     }
-    if (it.type === 'episode') return (it.plex?.thumb ? { plex: it.plex.thumb } : null) || sideFile(it.entry.side?.art?.thumb);
+    if (it.type === 'episode') return (md?.thumb ? { plex: md.thumb } : null) || sideFile(it.entry.side?.art?.thumb);
     if (it.type === 'show') {
-      if (kind === 'backdrop') return (it.plex?.art ? { plex: it.plex.art } : null) || sideFile(it.sideArt?.backdrop);
-      return (it.plex?.thumb ? { plex: it.plex.thumb } : null) || sideFile(it.sideArt?.poster);
+      if (kind === 'backdrop') return (md?.art ? { plex: md.art } : null) || sideFile(it.sideArt?.backdrop);
+      return (md?.thumb ? { plex: md.thumb } : null) || sideFile(it.sideArt?.poster);
     }
     return null;
   }

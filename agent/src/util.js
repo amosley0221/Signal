@@ -75,13 +75,29 @@ export function lanAddresses() {
 }
 
 const whichCache = new Map();
+let toolDir = null;
+
+/** Folder with tools the agent installed itself (ffmpeg, ffprobe); checked before PATH. */
+export function setToolDir(dir) {
+  toolDir = dir;
+  whichCache.clear();
+}
+
+/** The command to run for a tool: the agent's own copy when it has one, else whatever is on PATH. */
+export function tool(cmd) {
+  if (toolDir) {
+    const p = path.join(toolDir, process.platform === 'win32' ? `${cmd}.exe` : cmd);
+    if (fs.existsSync(p)) return p;
+  }
+  return cmd;
+}
 /** Resolve whether an executable is on PATH by trying to run `<cmd> -version`. */
 export function hasExecutable(cmd) {
   if (whichCache.has(cmd)) return whichCache.get(cmd);
   const p = new Promise((resolve) => {
     let done = false;
     try {
-      const child = spawn(cmd, ['-version'], { stdio: 'ignore', windowsHide: true });
+      const child = spawn(tool(cmd), ['-version'], { stdio: 'ignore', windowsHide: true });
       child.on('error', () => { if (!done) { done = true; resolve(false); } });
       child.on('exit', (code) => { if (!done) { done = true; resolve(code === 0); } });
     } catch {
@@ -95,7 +111,7 @@ export function hasExecutable(cmd) {
 /** Run a process, collecting stdout. Rejects on non-zero exit. */
 export function run(cmd, args, { timeoutMs = 120000 } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { windowsHide: true });
+    const child = spawn(tool(cmd), args, { windowsHide: true });
     const out = [];
     const err = [];
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);

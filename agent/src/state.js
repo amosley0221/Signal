@@ -16,6 +16,8 @@ export class State {
       devices: Array.isArray(s.devices) ? s.devices : [],
       overrides: s.overrides || {},
       progress: s.progress || {},
+      /** Catalog id → { tmdbId, kind } chosen in "Fix match". */
+      matches: s.matches || {},
     };
     this.pairRequests = new Map();
     this.listeners = new Set();
@@ -24,6 +26,13 @@ export class State {
   }
 
   get agentId() { return this.data.agentId; }
+
+  /** Remember a "Fix match" choice (null clears it). */
+  setMatch(id, match) {
+    if (match) this.data.matches[id] = { ...match, at: Date.now() };
+    else delete this.data.matches[id];
+    this.saveSoon();
+  }
 
   async save() { await writeJsonAtomic(this.file, this.data); }
 

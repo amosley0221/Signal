@@ -29,7 +29,9 @@ import androidx.compose.ui.unit.sp
 import com.amosley.signal.core.VideoNames
 import com.amosley.signal.data.MovieInfo
 import com.amosley.signal.data.ShowInfo
+import com.amosley.signal.data.MatchResult
 import com.amosley.signal.ui.Ctx
+import com.amosley.signal.ui.Sheet
 import com.amosley.signal.ui.components.Art
 import com.amosley.signal.ui.components.Hairline
 import com.amosley.signal.ui.components.Mono
@@ -104,6 +106,83 @@ fun ColumnScope.FixMatchSheet(c: Ctx, movieId: String?, showId: String?) {
         else show?.let { c.repo.setShowInfo(VideoNames.norm(c.repo.phoneShowName(it.id) ?: it.title), null) }
         c.st.sheet = null
     }.padding(6.dp))
+}
+
+/** Fix match for a movie or show on the PC: search TMDB through the agent and pin the right title there. */
+@Composable
+fun ColumnScope.PcFixMatchSheet(c: Ctx, sheet: Sheet.PcFixMatch) {
+    val scope = rememberCoroutineScope()
+    val pc = c.settings.pc
+    val base = c.status.baseUrl
+    val movie = sheet.kind == "movie"
+    var query by remember { mutableStateOf(sheet.title) }
+    var results by remember { mutableStateOf<List<MatchResult>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun search() {
+        if (pc == null || base == null) { error = "Connect to your PC first"; return }
+        busy = true
+        error = null
+        scope.launch {
+            // The year only helps for the original title; a new search term is usually a different title.
+            val year = if (query == sheet.title) sheet.year else null
+            runCatching { c.repo.agent.matchSearch(base, pc.token, sheet.kind, query, year) }
+                .onSuccess { results = it }
+                .onFailure { e ->
+                    results = emptyList()
+                    error = when ((e as? com.amosley.signal.data.AgentException)?.code) {
+                        404 -> "Update Signal Agent on your PC to fix matches from here"
+                        409 -> "Add a TMDB key in Settings → PC sync first"
+                        else -> e.message ?: "Search failed"
+                    }
+                }
+            busy = false
+        }
+    }
+
+    fun pick(tmdbId: Long?, label: String) {
+        if (pc == null || base == null) return
+        busy = true
+        scope.launch {
+            val ok = runCatching { c.repo.agent.setMatch(base, pc.token, sheet.id, tmdbId) }.isSuccess
+            if (ok) {
+                c.toast(label)
+                c.st.sheet = null
+                c.repo.refreshNow(force = true)
+            } else {
+                error = "Couldn't save the match"
+                busy = false
+            }
+        }
+    }
+    LaunchedEffect(Unit) { if (query.isNotBlank()) search() }
+
+    Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Text(if (movie) "Find the movie" else "Find the show", style = T.sheetTitle)
+            Mono("Details from TMDB · saved on your PC", style = T.metaMono, color = C.Faint)
+        }
+        Mono("Cancel", color = C.Fg, style = T.mono(11.sp, 600), modifier = Modifier.clickable { c.st.sheet = null }.padding(4.dp))
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Field(query, { query = it }, "Title", Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        OutlineBtn("Search") { search() }
+    }
+    Spacer(Modifier.height(8.dp))
+    Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+        if (busy) Spinner(Modifier.padding(20.dp).size(20.dp))
+        error?.let { Mono(it, color = C.AmberText, modifier = Modifier.padding(vertical = 16.dp)) }
+        if (!busy && error == null && results.isEmpty()) Mono("No results · try a shorter title", color = C.Faint, modifier = Modifier.padding(vertical = 16.dp))
+        results.forEach { r ->
+            ResultRow(r.title, listOfNotNull(r.year?.toString(), r.summary?.take(80)).joinToString(" · "), r.posterUrl) {
+                pick(r.tmdbId, "Using ${r.title}")
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Mono("Go back to automatic", color = C.Muted, modifier = Modifier.clickable { pick(null, "Back to automatic") }.padding(6.dp))
 }
 
 @Composable

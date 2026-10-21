@@ -136,6 +136,7 @@ fun SyncScreen(c: Ctx) {
                 }
             }
             AgentUpdateCard(c)
+            MetadataCard(c)
             val pending = c.dl.values.count { it is DlState.Queued || it is DlState.Running } + tagJobs.count { it.state == "QUEUED" }
             val attention = c.dl.values.count { it is DlState.Failed } + conflicts.size + tagJobs.count { it.state == "FAILED" }
             Spacer(Modifier.height(10.dp))
@@ -692,6 +693,81 @@ private fun AgentUpdateCard(c: Ctx) {
                     info = runCatching { c.repo.agent.updateInfo(base, pc.token) }.getOrNull()
                 }
                 busy = false
+            }
+        }
+    }
+}
+
+/** Movie & TV details: the TMDB key that lets Signal look up titles itself, and whether those beat Plex's. */
+@Composable
+private fun MetadataCard(c: Ctx) {
+    val pc = c.settings.pc ?: return
+    val base = c.status.baseUrl ?: return
+    val scope = rememberCoroutineScope()
+    var meta by remember { mutableStateOf<com.amosley.signal.data.MetadataSettings?>(null) }
+    var key by remember { mutableStateOf("") }
+    var editing by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(base) { meta = runCatching { c.repo.agent.metadata(base, pc.token) }.getOrNull() }
+    val m = meta ?: return // older agents don't have this
+
+    fun save(tmdbKey: String?, prefer: String?) {
+        busy = true
+        error = null
+        scope.launch {
+            runCatching { c.repo.agent.setMetadata(base, pc.token, tmdbKey, prefer) }
+                .onSuccess { r ->
+                    if (r.ok) {
+                        meta = r
+                        editing = false
+                        key = ""
+                        c.repo.refreshNow(force = true)
+                    } else error = r.message
+                }
+                .onFailure { error = it.message ?: "Couldn't save" }
+            busy = false
+        }
+    }
+
+    Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxWidth().background(C.Card).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Movie & TV details", style = T.rowSecondary)
+                Text(
+                    when {
+                        m.tmdb && m.plex -> "From TMDB and Plex"
+                        m.tmdb -> "From TMDB · posters, summaries, episode titles"
+                        m.plex -> "From Plex only · add a free TMDB key so Signal doesn't need Plex"
+                        else -> "Add a free TMDB key for posters, summaries and episode titles"
+                    },
+                    style = T.ui(12.5.sp), color = if (m.tmdb) C.Muted else C.AmberText,
+                )
+            }
+            if (busy) Spinner(Modifier.size(16.dp))
+            else if (!editing) OutlineBtn(if (m.tmdb) "Change key" else "Add key") { editing = true }
+        }
+        if (editing) {
+            Spacer(Modifier.height(10.dp))
+            Text("On themoviedb.org: Settings → API. Paste the API Key or the API Read Access Token.", style = T.ui(12.5.sp), color = C.Muted)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Field(key, { key = it.trim() }, "TMDB key", Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                OutlineBtn("Save") { if (key.isNotBlank() && !busy) save(key, null) }
+            }
+            Mono("Cancel", color = C.Muted, modifier = Modifier.clickable { editing = false; error = null }.padding(vertical = 6.dp))
+        }
+        error?.let { Text(it, style = T.ui(12.5.sp), color = C.AmberText, modifier = Modifier.padding(top = 6.dp)) }
+        if (m.tmdb && m.plex) {
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Prefer TMDB over Plex", style = T.ui(14.sp))
+                    Text("Off: Plex's details win when it has the title", style = T.ui(12.sp), color = C.Muted)
+                }
+                Toggle(m.prefer == "tmdb") { on -> if (!busy) save(null, if (on) "tmdb" else "plex") }
             }
         }
     }

@@ -8,12 +8,12 @@ import { promisify } from 'node:util';
 import { spawn } from 'node:child_process';
 import { parseRange } from './range.js';
 import { suggestArtists } from './suggest.js';
-import { mimeFor, hasExecutable } from './util.js';
+import { mimeFor, hasExecutable, tool } from './util.js';
 import { isLosslessCodec } from './media.js';
 import { adminPage } from './admin.js';
 import { validateSetup, saveSetup } from './config.js';
 import { Plex } from './plex.js';
-import { PlexImages, IMAGE_WIDTHS } from './images.js';
+import { PlexImages, IMAGE_WIDTHS, fetchTmdbImage } from './images.js';
 import { listFolders } from './desktop.js';
 
 const MAX_JSON = 1024 * 1024;
@@ -129,6 +129,40 @@ export function createServer(agent) {
 
   route('GET', '/api/pair/status/:id', (req, res, p) => sendJson(req, res, 200, state.pairStatus(p.id)), { auth: false });
 
+  // ---- Signal's own movie & TV details (TMDB) ----
+  route('GET', '/api/metadata', (req, res) => sendJson(req, res, 200, agent.metadataSettings()));
+  route('POST', '/api/metadata', async (req, res) => {
+    const body = await readJson(req);
+    const r = await agent.setMetadata({ tmdbKey: body.tmdbKey, prefer: body.prefer });
+    sendJson(req, res, r.ok ? 200 : 400, r);
+  });
+  // "Fix match": search TMDB, then pin a result to a movie or show.
+  route('GET', '/api/match/search', async (req, res, p, q) => {
+    if (!agent.tmdb) return sendJson(req, res, 409, { error: 'no_tmdb', message: 'Add a TMDB key first.' });
+    try {
+      const kind = q.get('kind') === 'tv' ? 'tv' : 'movie';
+      sendJson(req, res, 200, await agent.tmdb.search(kind, q.get('q') || '', Number(q.get('year')) || undefined));
+    } catch (e) {
+      sendJson(req, res, 502, { error: 'tmdb', message: e.message });
+    }
+  });
+  route('POST', '/api/match/:id', async (req, res, p) => {
+    const it = agent.catalog.get(p.id);
+    if (!it || (it.type !== 'movie' && it.type !== 'show')) return notFound(req, res);
+    if (!agent.tmdb) return sendJson(req, res, 409, { error: 'no_tmdb', message: 'Add a TMDB key first.' });
+    const body = await readJson(req);
+    const kind = it.type === 'show' ? 'tv' : 'movie';
+    const tmdbId = body.tmdbId ? Number(body.tmdbId) : null;
+    try {
+      if (tmdbId) await agent.tmdb.load(kind, tmdbId);
+    } catch (e) {
+      return sendJson(req, res, 502, { error: 'tmdb', message: e.message });
+    }
+    agent.state.setMatch(p.id, tmdbId ? { tmdbId, kind } : null);
+    agent.catalog.dirty = true;
+    sendJson(req, res, 200, { ok: true });
+  });
+
   // A paired phone can approve a new device (e.g. a tablet) when nobody is at the PC. Both screens show the same code.
   route('GET', '/api/pair/pending', (req, res) => sendJson(req, res, 200, state.pendingPairs()));
   route('POST', '/api/pair/:id/approve', (req, res, p) => {
@@ -197,7 +231,7 @@ export function createServer(agent) {
           'Cache-Control': 'no-store',
         });
         if (req.method === 'HEAD') return res.end();
-        const ff = spawn('ffmpeg', ['-v', 'error', '-nostdin', '-i', it.abs, '-map', '0:a:0', '-map_metadata', '0', '-c:a', 'flac', '-sample_fmt', 's16', '-ar', '44100', '-f', 'flac', 'pipe:1'], { windowsHide: true });
+        const ff = spawn(tool('ffmpeg'), ['-v', 'error', '-nostdin', '-i', it.abs, '-map', '0:a:0', '-map_metadata', '0', '-c:a', 'flac', '-sample_fmt', 's16', '-ar', '44100', '-f', 'flac', 'pipe:1'], { windowsHide: true });
         ff.stdout.pipe(res);
         ff.on('error', () => res.destroy());
         ff.on('exit', (code) => { if (code !== 0) res.destroy(); });
@@ -211,6 +245,7 @@ export function createServer(agent) {
   route('HEAD', '/api/download/:id', downloadHandler);
 
   let plexImages = null;
+  let tmdbImages = null;
   route('GET', '/api/art/:id', async (req, res, p, q) => {
     const a = await agent.catalog.art(p.id, q.get('kind') || 'cover');
     if (!a) return notFound(req, res);
@@ -222,8 +257,15 @@ export function createServer(agent) {
     }
     if (a.plex) {
       try {
-        if (!plexImages || plexImages.plex !== agent.plex) plexImages = new PlexImages(agent.plex, path.join(agent.config.dataDir, 'plex-images'));
-        const img = await plexImages.get(a.plex, IMAGE_WIDTHS[q.get('kind') || 'cover'] || 0);
+        const width = IMAGE_WIDTHS[q.get('kind') || 'cover'] || 0;
+        let img;
+        if (String(a.plex).startsWith('tmdb:')) {
+          tmdbImages ||= new PlexImages(null, path.join(agent.config.dataDir, 'tmdb-images'), { fetchImage: (p2, w) => fetchTmdbImage(p2, w) });
+          img = await tmdbImages.get(a.plex, width);
+        } else {
+          if (!plexImages || plexImages.plex !== agent.plex) plexImages = new PlexImages(agent.plex, path.join(agent.config.dataDir, 'plex-images'));
+          img = await plexImages.get(a.plex, width);
+        }
         // Plex picture paths change when the picture does, so a fetched one never goes stale.
         res.writeHead(200, { 'Content-Type': img.mime, 'Content-Length': img.data.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
         return res.end(img.data);
